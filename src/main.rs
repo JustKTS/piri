@@ -60,6 +60,13 @@ enum Commands {
         #[command(subcommand)]
         action: WindowOrderAction,
     },
+    /// Window marks (bind a key/name to a window for quick focus)
+    Mark {
+        /// Mark name (e.g. a key letter)
+        name: String,
+        #[command(subcommand)]
+        action: MarkAction,
+    },
     /// Stop the daemon
     Stop,
     /// Generate shell completion script
@@ -94,6 +101,16 @@ enum SingletonAction {
 enum WindowOrderAction {
     /// Toggle window order (reorder windows in current workspace)
     Toggle,
+}
+
+#[derive(Subcommand)]
+enum MarkAction {
+    /// Focus marked window if the binding is valid; otherwise bind the focused window
+    Toggle,
+    /// Remove this mark
+    Delete,
+    /// Bind the focused window to this mark (replaces an existing binding)
+    Add,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -221,6 +238,32 @@ async fn async_main() -> Result<()> {
                         client.send_request(IpcRequest::WindowOrderToggle).await,
                         "Window order toggled",
                         "Failed to toggle window order",
+                    )?;
+                }
+            }
+        }
+        Commands::Mark { name, action } => {
+            let client = IpcClient::new(None);
+            match action {
+                MarkAction::Toggle => {
+                    handle_ipc_response(
+                        client.send_request(IpcRequest::MarkToggle { name: name.clone() }).await,
+                        &format!("Mark '{}' toggled", name),
+                        "Failed to toggle mark",
+                    )?;
+                }
+                MarkAction::Delete => {
+                    handle_ipc_response(
+                        client.send_request(IpcRequest::MarkDelete { name: name.clone() }).await,
+                        &format!("Mark '{}' removed", name),
+                        "Failed to delete mark",
+                    )?;
+                }
+                MarkAction::Add => {
+                    handle_ipc_response(
+                        client.send_request(IpcRequest::MarkAdd { name: name.clone() }).await,
+                        &format!("Mark '{}' set to focused window", name),
+                        "Failed to add mark",
                     )?;
                 }
             }

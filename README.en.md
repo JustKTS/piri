@@ -13,9 +13,22 @@ Piri is a high-performance [Niri](https://github.com/YaLTeR/niri) extension tool
 - 🎯 **Window Rule**: Powerful rule engine. Automatically places windows based on regex matching and provides focus-triggered command execution with a built-in de-duplication mechanism (see [Window Rule Docs](docs/en/plugins/window_rule.md))
 - 📐 **Workspace Rule**: Workspace window layout management. Provides automatic width adjustment, automatic tiling, automatic alignment, and automatic maximization. Integrates original Autofill functionality (see [Workspace Rule Docs](docs/en/plugins/workspace_rule.md))
 - 🔒 **Singleton**: Single-instance assurance. Ensures specific applications remain globally unique, supporting quick focus or automatic process launching (see [Singleton Docs](docs/en/plugins/singleton.md))
+- 📌 **Mark**: Named window marks for quick focus. Bind the focused window to a name and jump back later; bindings are in-memory only (see [Mark Docs](docs/en/plugins/mark.md))
 - 📋 **Window Order**: Intelligent reordering. Automatically reorders tiled windows based on configured weights, preserving relative positions for identical weights to minimize movement (see [Window Order Docs](docs/en/plugins/window_order.md))
 - 🍽️ **Swallow**: Window swallowing mechanism. Automatically hides parent windows when child windows are opened, allowing child windows to replace parent windows in the layout (see [Swallow Docs](docs/en/plugins/swallow.md))
 
+## Window Matching
+
+Piri uses a unified window matching mechanism: regex on `app_id` and/or `title`. Plugins such as `window_rule`, `singleton`, and `scratchpads` use it to find windows.
+
+**Supported matching**:
+- Full regular expression syntax
+- Match `app_id` and/or `title`
+- If both are set, **either** match can satisfy the rule (OR)
+
+> **Note**: The Window Rule plugin also supports list matching for `app_id` and `title`; see [Window Rule Docs](docs/en/plugins/window_rule.md).
+
+**Details**: [Window matching](docs/en/window_matching.md)
 
 ## Quick Start
 
@@ -324,6 +337,34 @@ piri singleton {name} toggle
 - Supports executing custom commands after window creation (`on_created_command`)
 
 For detailed documentation, please refer to the [Singleton documentation](docs/en/plugins/singleton.md).
+
+### Mark
+
+Assign **named marks** (e.g. letters `a`, `b`) to windows for quick focus. Marks are kept in the daemon’s memory and are **cleared when the daemon restarts**. You only enable the plugin in `piri.toml` and bind `spawn` commands in Niri for marks you use often.
+
+**Configuration example**:
+
+```toml
+[piri.plugins]
+mark = true
+```
+
+**Quick usage**:
+
+```bash
+# No valid binding: bind focused window to name; binding exists and window lives: focus it
+piri mark {name} toggle
+
+# Force-bind focused window to name (overwrites previous binding)
+piri mark {name} add
+
+# Remove this mark
+piri mark {name} delete
+```
+
+**Note**: Piri cannot capture the “next key” globally. To save shortcut slots, you can use a launcher (e.g. `fuzzel`) to pick a letter, then run the commands above. If Niri adds multi-key sequences or binding modes, you can group `piri mark …` calls under one prefix.
+
+For detailed documentation, see the [Mark documentation](docs/en/plugins/mark.md).
 
 ### Window Order
 

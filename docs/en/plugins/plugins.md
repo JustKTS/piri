@@ -22,6 +22,14 @@ Executes commands when switching to specific empty workspaces. Useful for automa
 - Workspace-based configuration
 - Similar to Hyprland's `on-created-empty` workspace rule
 
+### [Mark Plugin](mark.md)
+
+Named marks for windows via `piri mark …`: bind the focused window or jump back to a marked window. Bindings are kept in daemon memory only; no per-mark tables in the config.
+
+**Key features**:
+- `toggle`, `add`, and `delete` operations
+- Works well with Niri `spawn` keybindings or a launcher
+
 ### [Window Rule Plugin](window_rule.md)
 
 Automatically moves windows to specified workspaces based on their `app_id` or `title`. Useful for automating window management and organizing applications.
@@ -50,10 +58,14 @@ You can control which plugins are enabled or disabled in the configuration file:
 scratchpads = true
 empty = true
 window_rule = true
-autofill = true
+workspace_rule = true
+singleton = true
+window_order = true
+swallow = true
+mark = true
 ```
 
 **Default Behavior**:
 - If not explicitly specified, plugins are **disabled** by default (`false`)
-- You must explicitly set `scratchpads = true`, `empty = true`, `window_rule = true`, or `autofill = true` to enable plugins
-- Exception: `window_rule` plugin is enabled by default if window rules are configured (unless explicitly set to `false`)
+- Set each plugin to `true` explicitly to enable it
+- Exception: `window_rule` is enabled by default if window rules are configured (unless explicitly set to `false`)

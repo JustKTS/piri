@@ -22,6 +22,14 @@ Piri 支持插件系统，允许你扩展功能。插件在守护进程模式下
 - 基于工作区的配置
 - 类似于 Hyprland 的 `on-created-empty` 工作区规则
 
+### [Mark 插件](mark.md)
+
+为窗口设置命名标记，通过 `piri mark …` 绑定当前焦点窗口或跳回已标记窗口。绑定仅存于守护进程内存，无需在配置中为每个标记单独建表。
+
+**主要特性**：
+- `toggle` / `add` / `delete` 三种操作
+- 适合与 Niri `spawn` 或启动器组合使用
+
 ### [Window Rule 插件](window_rule.md)
 
 根据窗口的 `app_id` 或 `title` 自动将窗口移动到指定的工作区。用于自动化窗口管理和组织应用程序。
@@ -72,10 +80,14 @@ Piri 支持插件系统，允许你扩展功能。插件在守护进程模式下
 scratchpads = true
 empty = true
 window_rule = true
-autofill = true
+workspace_rule = true
+singleton = true
+window_order = true
+swallow = true
+mark = true
 ```
 
 **默认行为**：
 - 如果未明确指定，插件默认**禁用**（`false`）
-- 必须显式设置 `scratchpads = true`、`empty = true`、`window_rule = true` 或 `autofill = true` 来启用插件
+- 必须显式将对应项设为 `true` 来启用插件
 - `window_rule` 插件例外：如果配置了窗口规则，默认启用（除非显式设置为 `false`）

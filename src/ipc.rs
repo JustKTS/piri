@@ -19,6 +19,18 @@ pub enum IpcRequest {
         name: String,
     },
     WindowOrderToggle,
+    /// Mark: focus if bound window exists, else bind current focus to `name`.
+    MarkToggle {
+        name: String,
+    },
+    /// Remove mark `name` (no-op if missing).
+    MarkDelete {
+        name: String,
+    },
+    /// Bind current focus to `name`, replacing any previous binding.
+    MarkAdd {
+        name: String,
+    },
     Ping,
     Shutdown,
 }
@@ -259,6 +271,22 @@ pub async fn handle_request(
                         IpcResponse::Error("WindowOrder plugin is enabled but not initialized. Please restart the daemon.".to_string())
                     } else {
                         IpcResponse::Error("WindowOrder plugin is not enabled. Please enable it in the configuration file (piri.plugins.window_order = true).".to_string())
+                    }
+                }
+                IpcRequest::MarkToggle { .. }
+                | IpcRequest::MarkDelete { .. }
+                | IpcRequest::MarkAdd { .. } => {
+                    let config = handler.config();
+                    if config.piri.plugins.is_enabled("mark") {
+                        IpcResponse::Error(
+                            "Mark plugin is enabled but not initialized. Please restart the daemon."
+                                .to_string(),
+                        )
+                    } else {
+                        IpcResponse::Error(
+                            "Mark plugin is not enabled. Set piri.plugins.mark = true in the config."
+                                .to_string(),
+                        )
                     }
                 }
             }
