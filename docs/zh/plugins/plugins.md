@@ -30,6 +30,15 @@ Piri 支持插件系统，允许你扩展功能。插件在守护进程模式下
 - `toggle` / `add` / `delete` 三种操作
 - 适合与 Niri `spawn` 或启动器组合使用
 
+### [Sticky 插件](sticky.md)
+
+将一个浮动窗口固定为“跟随窗口”，在焦点工作区切换时自动跟随。适合常驻小工具窗口。
+
+**主要特性**：
+- `add` / `delete` 两个命令
+- `--cross` 控制是否跨显示器跟随
+- 仅支持 floating 窗口
+
 ### [Window Rule 插件](window_rule.md)
 
 根据窗口的 `app_id` 或 `title` 自动将窗口移动到指定的工作区。用于自动化窗口管理和组织应用程序。
@@ -85,6 +94,7 @@ singleton = true
 window_order = true
 swallow = true
 mark = true
+sticky = true
 ```
 
 **默认行为**：

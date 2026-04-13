@@ -30,6 +30,15 @@ Named marks for windows via `piri mark …`: bind the focused window or jump bac
 - `toggle`, `add`, and `delete` operations
 - Works well with Niri `spawn` keybindings or a launcher
 
+### [Sticky Plugin](sticky.md)
+
+Pins one floating window as a follower and moves it when the focused workspace changes. Great for always-available utility windows.
+
+**Key features**:
+- `add` and `delete` commands
+- `--cross` controls cross-monitor behavior
+- Floating windows only
+
 ### [Window Rule Plugin](window_rule.md)
 
 Automatically moves windows to specified workspaces based on their `app_id` or `title`. Useful for automating window management and organizing applications.
@@ -63,6 +72,7 @@ singleton = true
 window_order = true
 swallow = true
 mark = true
+sticky = true
 ```
 
 **Default Behavior**:

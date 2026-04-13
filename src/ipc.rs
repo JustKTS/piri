@@ -31,6 +31,10 @@ pub enum IpcRequest {
     MarkAdd {
         name: String,
     },
+    StickyAdd {
+        cross: bool,
+    },
+    StickyDelete,
     Ping,
     Shutdown,
 }
@@ -285,6 +289,20 @@ pub async fn handle_request(
                     } else {
                         IpcResponse::Error(
                             "Mark plugin is not enabled. Set piri.plugins.mark = true in the config."
+                                .to_string(),
+                        )
+                    }
+                }
+                IpcRequest::StickyAdd { .. } | IpcRequest::StickyDelete => {
+                    let config = handler.config();
+                    if config.piri.plugins.is_enabled("sticky") {
+                        IpcResponse::Error(
+                            "Sticky plugin is enabled but not initialized. Please restart the daemon."
+                                .to_string(),
+                        )
+                    } else {
+                        IpcResponse::Error(
+                            "Sticky plugin is not enabled. Set piri.plugins.sticky = true in the config."
                                 .to_string(),
                         )
                     }

@@ -67,6 +67,12 @@ enum Commands {
         #[command(subcommand)]
         action: MarkAction,
     },
+    /// Sticky floating window management
+    Sticky {
+        /// Action to perform
+        #[command(subcommand)]
+        action: StickyAction,
+    },
     /// Stop the daemon
     Stop,
     /// Generate shell completion script
@@ -111,6 +117,18 @@ enum MarkAction {
     Delete,
     /// Bind the focused window to this mark (replaces an existing binding)
     Add,
+}
+
+#[derive(Subcommand)]
+enum StickyAction {
+    /// Add focused floating window as sticky
+    Add {
+        /// If true, sticky window can follow across monitors
+        #[arg(long)]
+        cross: bool,
+    },
+    /// Remove current sticky window
+    Delete,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -264,6 +282,25 @@ async fn async_main() -> Result<()> {
                         client.send_request(IpcRequest::MarkAdd { name: name.clone() }).await,
                         &format!("Mark '{}' set to focused window", name),
                         "Failed to add mark",
+                    )?;
+                }
+            }
+        }
+        Commands::Sticky { action } => {
+            let client = IpcClient::new(None);
+            match action {
+                StickyAction::Add { cross } => {
+                    handle_ipc_response(
+                        client.send_request(IpcRequest::StickyAdd { cross }).await,
+                        "Sticky window added",
+                        "Failed to add sticky window",
+                    )?;
+                }
+                StickyAction::Delete => {
+                    handle_ipc_response(
+                        client.send_request(IpcRequest::StickyDelete).await,
+                        "Sticky window removed",
+                        "Failed to delete sticky window",
                     )?;
                 }
             }

@@ -14,6 +14,7 @@ Piri is a high-performance [Niri](https://github.com/YaLTeR/niri) extension tool
 - 📐 **Workspace Rule**: Workspace window layout management. Provides automatic width adjustment, automatic tiling, automatic alignment, and automatic maximization. Integrates original Autofill functionality (see [Workspace Rule Docs](docs/en/plugins/workspace_rule.md))
 - 🔒 **Singleton**: Single-instance assurance. Ensures specific applications remain globally unique, supporting quick focus or automatic process launching (see [Singleton Docs](docs/en/plugins/singleton.md))
 - 📌 **Mark**: Named window marks for quick focus. Bind the focused window to a name and jump back later; bindings are in-memory only (see [Mark Docs](docs/en/plugins/mark.md))
+- 📍 **Sticky**: Floating window follower. Pin one floating window to follow the focused workspace, with optional cross-monitor behavior via `--cross` (see [Sticky Docs](docs/en/plugins/sticky.md))
 - 📋 **Window Order**: Intelligent reordering. Automatically reorders tiled windows based on configured weights, preserving relative positions for identical weights to minimize movement (see [Window Order Docs](docs/en/plugins/window_order.md))
 - 🍽️ **Swallow**: Window swallowing mechanism. Automatically hides parent windows when child windows are opened, allowing child windows to replace parent windows in the layout (see [Swallow Docs](docs/en/plugins/swallow.md))
 
@@ -365,6 +366,32 @@ piri mark {name} delete
 **Note**: Piri cannot capture the “next key” globally. To save shortcut slots, you can use a launcher (e.g. `fuzzel`) to pick a letter, then run the commands above. If Niri adds multi-key sequences or binding modes, you can group `piri mark …` calls under one prefix.
 
 For detailed documentation, see the [Mark documentation](docs/en/plugins/mark.md).
+
+### Sticky
+
+Set the currently focused **floating window** as a follower so it moves with your focused workspace. Useful for persistent utility windows like dictionary, translator, logs, or media control.
+
+**Configuration example**:
+
+```toml
+[piri.plugins]
+sticky = true
+```
+
+**Quick usage**:
+
+```bash
+# Set sticky (same-monitor follow only)
+piri sticky add
+
+# Set sticky (allow cross-monitor follow)
+piri sticky add --cross
+
+# Remove sticky binding
+piri sticky delete
+```
+
+For details, see the [Sticky documentation](docs/en/plugins/sticky.md).
 
 ### Window Order
 

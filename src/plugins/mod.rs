@@ -2,6 +2,7 @@ pub mod empty;
 pub mod mark;
 pub mod scratchpads;
 pub mod singleton;
+pub mod sticky;
 pub mod swallow;
 pub mod window_order;
 pub mod window_rule;
@@ -143,6 +144,7 @@ register_plugins! {
     "swallow"      => Swallow(swallow::SwallowPlugin),
     "workspace_rule" => WorkspaceRule(workspace_rule::WorkspaceRulePlugin),
     "mark" => Mark(mark::MarkPlugin),
+    "sticky" => Sticky(sticky::StickyPlugin),
 }
 
 pub struct PluginManager {

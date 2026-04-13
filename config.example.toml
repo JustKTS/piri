@@ -17,6 +17,8 @@ singleton = true
 window_order = true
 swallow = true
 workspace_rule = true
+mark = true
+sticky = true
 
 [piri.scratchpad]
 default_size = "40% 60%"
@@ -113,6 +115,20 @@ command = 'google-chrome-stable'
 [singleton.term]
 command = 'GTK_IM_MODULE=wayland ghostty --class=singleton.term'
 app_id = 'singleton.term'
+
+# Mark plugin:
+# Runtime-only named marks for quick focus.
+# No [mark.*] table is needed; use CLI:
+#   piri mark {name} toggle
+#   piri mark {name} add
+#   piri mark {name} delete
+
+# Sticky plugin:
+# Runtime-only sticky floating window state.
+# No [sticky.*] table is needed; use CLI:
+#   piri sticky add
+#   piri sticky add --cross
+#   piri sticky delete
 
 # Window order: reorder windows in workspace based on app_id
 # Format: [piri.window_order] for plugin config, [window_order] for app_id weights
