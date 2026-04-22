@@ -11,7 +11,7 @@ Piri is a high-performance [Niri](https://github.com/YaLTeR/niri) extension tool
 - 📦 **Scratchpads**: Intelligent hide/show windows. Supports auto-capturing existing windows or launching on-demand, following you seamlessly across workspaces and monitors (see [Scratchpads Docs](docs/en/plugins/scratchpads.md))
 - 🔌 **Empty**: Automation for empty workspaces. Automatically triggers preset commands when switching to an empty workspace to get you into the flow faster (see [Empty Docs](docs/en/plugins/empty.md))
 - 🎯 **Window Rule**: Powerful rule engine. Automatically places windows based on regex matching and provides focus-triggered command execution with a built-in de-duplication mechanism (see [Window Rule Docs](docs/en/plugins/window_rule.md))
-- 📐 **Workspace Rule**: Workspace window layout management. Provides automatic width adjustment, automatic tiling, automatic alignment, and automatic maximization. Integrates original Autofill functionality (see [Workspace Rule Docs](docs/en/plugins/workspace_rule.md))
+- 📐 **Workspace Rule**: Workspace window layout management. Provides automatic width adjustment, automatic tiling, automatic alignment, and automatic maximization. Integrates original Autofill functionality with built-in EdgePulse edge indicators (see [Workspace Rule Docs](docs/en/plugins/workspace_rule.md), [EdgePulse Docs](docs/en/plugins/edge_pulse.md))
 - 🔒 **Singleton**: Single-instance assurance. Ensures specific applications remain globally unique, supporting quick focus or automatic process launching (see [Singleton Docs](docs/en/plugins/singleton.md))
 - 📌 **Mark**: Named window marks for quick focus. Bind the focused window to a name and jump back later; bindings are in-memory only (see [Mark Docs](docs/en/plugins/mark.md))
 - 📍 **Sticky**: Floating window follower. Pin one floating window to follow the focused workspace, with optional cross-monitor behavior via `--cross` (see [Sticky Docs](docs/en/plugins/sticky.md))
@@ -256,7 +256,7 @@ For detailed documentation, please refer to the [Window Rule documentation](docs
 
 ![Workspace Rule](./assets/autofill.mp4)
 
-Workspace window layout management plugin that provides automatic width adjustment, automatic tiling, automatic alignment, and automatic maximization. Integrates the original Autofill plugin functionality, providing comprehensive workspace window management capabilities.
+Workspace window layout management plugin that provides automatic width adjustment, automatic tiling, automatic alignment, and automatic maximization. Integrates the original Autofill plugin functionality with built-in EdgePulse edge indicators that render visual hints when the focused column reaches the workspace edge.
 
 **Configuration Example**:
 ```toml
@@ -283,6 +283,7 @@ auto_tile = true  # Automatic tiling
 - Automatic tiling: Automatically merge new windows into existing columns
 - Automatic alignment: Automatically align to rightmost position after closing windows (original Autofill functionality)
 - Automatic maximization: Automatically maximize when only one window, unmaximize when multiple windows
+- EdgePulse edge indicators: Render visual hints when the focused column reaches the workspace edge
 - Workspace-aware: Each workspace can be configured independently
 - Flexible configuration: Supports default and workspace-specific configuration
 

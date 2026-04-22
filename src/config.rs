@@ -455,6 +455,9 @@ pub struct WorkspaceRuleConfig {
     /// If true, automatically maximize window when there's only one window, and unmaximize when there are multiple windows
     #[serde(default)]
     pub auto_maximize: bool,
+    /// EdgePulse indicator config for this workspace.
+    #[serde(default)]
+    pub edge_pulse: EdgePulseConfig,
 }
 
 /// Workspace rule section in piri config (default settings)
@@ -472,6 +475,9 @@ pub struct WorkspaceRuleSection {
     /// If true, automatically maximize window when there's only one window, and unmaximize when there are multiple windows
     #[serde(default)]
     pub auto_maximize: bool,
+    /// Default EdgePulse indicator config for all workspaces.
+    #[serde(default)]
+    pub edge_pulse: EdgePulseConfig,
 }
 
 impl Default for WorkspaceRuleSection {
@@ -481,8 +487,88 @@ impl Default for WorkspaceRuleSection {
             auto_tile: false,
             auto_fill: false,
             auto_maximize: false,
+            edge_pulse: EdgePulseConfig::default(),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EdgePulseConfig {
+    /// Enable left/right missing-neighbor indicator.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Show left-side indicator when there is no left neighbor.
+    #[serde(default = "default_true")]
+    pub show_left: bool,
+    /// Show right-side indicator when there is no right neighbor.
+    #[serde(default = "default_true")]
+    pub show_right: bool,
+    /// Indicator width in pixels.
+    #[serde(default = "default_edge_pulse_width")]
+    pub width: u32,
+    /// Indicator height ratio to output height, range 0.0-1.0.
+    #[serde(default = "default_edge_pulse_height_ratio")]
+    pub height_ratio: f64,
+    /// Gradient start color for left edge.
+    #[serde(default = "default_left_start")]
+    pub left_gradient_start: String,
+    /// Gradient end color for left edge.
+    #[serde(default = "default_left_end")]
+    pub left_gradient_end: String,
+    /// Gradient start color for right edge.
+    #[serde(default = "default_right_start")]
+    pub right_gradient_start: String,
+    /// Gradient end color for right edge.
+    #[serde(default = "default_right_end")]
+    pub right_gradient_end: String,
+    /// Global alpha 0.0-1.0.
+    #[serde(default = "default_edge_pulse_alpha")]
+    pub alpha: f64,
+}
+
+impl Default for EdgePulseConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            show_left: true,
+            show_right: true,
+            width: default_edge_pulse_width(),
+            height_ratio: default_edge_pulse_height_ratio(),
+            left_gradient_start: default_left_start(),
+            left_gradient_end: default_left_end(),
+            right_gradient_start: default_right_start(),
+            right_gradient_end: default_right_end(),
+            alpha: default_edge_pulse_alpha(),
+        }
+    }
+}
+
+fn default_edge_pulse_width() -> u32 {
+    14
+}
+
+fn default_edge_pulse_height_ratio() -> f64 {
+    0.42
+}
+
+fn default_edge_pulse_alpha() -> f64 {
+    0.85
+}
+
+fn default_left_start() -> String {
+    "#68d8ff".to_string()
+}
+
+fn default_left_end() -> String {
+    "#1f4fff".to_string()
+}
+
+fn default_right_start() -> String {
+    "#ffd36a".to_string()
+}
+
+fn default_right_end() -> String {
+    "#ff7a1f".to_string()
 }
 
 impl Default for Config {

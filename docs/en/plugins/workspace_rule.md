@@ -10,6 +10,7 @@ The Workspace Rule plugin provides the following features:
 - **Automatic Tiling** (`auto_tile`): Automatically merge new windows into existing columns (except first column)
 - **Automatic Alignment** (`auto_fill`): Automatically align the last column of windows to the rightmost position (original Autofill functionality)
 - **Automatic Maximization** (`auto_maximize`): Automatically maximize when there's only one window, and unmaximize when there are multiple windows
+- **EdgePulse Edge Indicator** (`edge_pulse`): Trigger left/right edge hints when the focused column reaches the workspace edge
 
 ## Demo Videos
 
@@ -80,6 +81,16 @@ auto_fill = true
 | `auto_tile` | `bool` | If `true`, automatically merge new windows into existing columns (except first column). When a non-first column has only one window, new windows will be merged into that column |
 | `auto_fill` | `bool` | If `true`, automatically align the last column of windows to the rightmost position (original Autofill functionality) |
 | `auto_maximize` | `bool` | If `true`, automatically maximize to edges when workspace has only one window, and unmaximize when there are multiple windows |
+| `edge_pulse.enabled` | `bool` | Enable EdgePulse workspace-edge detection and hints |
+| `edge_pulse.show_left` | `bool` | Show left hint when reaching the workspace left edge |
+| `edge_pulse.show_right` | `bool` | Show right hint when reaching the workspace right edge |
+| `edge_pulse.width` | `u32` | Hint width in pixels |
+| `edge_pulse.height_ratio` | `f64` | Hint height ratio against output height (0.0-1.0) |
+| `edge_pulse.left_gradient_start` | `String` | Left hint gradient start color (e.g. `#68d8ff`) |
+| `edge_pulse.left_gradient_end` | `String` | Left hint gradient end color |
+| `edge_pulse.right_gradient_start` | `String` | Right hint gradient start color |
+| `edge_pulse.right_gradient_end` | `String` | Right hint gradient end color |
+| `edge_pulse.alpha` | `f64` | Global alpha (0.0-1.0) |
 
 ## How It Works
 

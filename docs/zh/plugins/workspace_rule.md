@@ -10,6 +10,7 @@ Workspace Rule 插件提供以下功能：
 - **自动平铺** (`auto_tile`): 自动将新窗口合并到现有列中（第一列除外）
 - **自动对齐** (`auto_fill`): 自动将最后一列窗口对齐到最右侧（原 Autofill 功能）
 - **自动最大化** (`auto_maximize`): 当只有一个窗口时自动最大化，多个窗口时自动取消最大化
+- **EdgePulse 边缘提示** (`edge_pulse`): 当当前聚焦列到达工作区左/右边缘时，触发对应侧边缘提示
 
 ## 演示视频
 
@@ -80,6 +81,16 @@ auto_fill = true
 | `auto_tile` | `bool` | 如果为 `true`，自动将新窗口合并到现有列中（第一列除外）。当某个非第一列只有一个窗口时，新窗口会被合并到该列 |
 | `auto_fill` | `bool` | 如果为 `true`，自动将最后一列窗口对齐到最右侧（原 Autofill 功能） |
 | `auto_maximize` | `bool` | 如果为 `true`，当工作区只有一个窗口时自动最大化到边缘，多个窗口时自动取消最大化 |
+| `edge_pulse.enabled` | `bool` | 是否启用 EdgePulse 工作区边缘检测与提示 |
+| `edge_pulse.show_left` | `bool` | 到达工作区左边缘时是否显示左侧提示 |
+| `edge_pulse.show_right` | `bool` | 到达工作区右边缘时是否显示右侧提示 |
+| `edge_pulse.width` | `u32` | 提示宽度（像素） |
+| `edge_pulse.height_ratio` | `f64` | 提示高度占输出高度的比例（0.0-1.0） |
+| `edge_pulse.left_gradient_start` | `String` | 左侧渐变起始色（如 `#68d8ff`） |
+| `edge_pulse.left_gradient_end` | `String` | 左侧渐变结束色 |
+| `edge_pulse.right_gradient_start` | `String` | 右侧渐变起始色 |
+| `edge_pulse.right_gradient_end` | `String` | 右侧渐变结束色 |
+| `edge_pulse.alpha` | `f64` | 全局透明度（0.0-1.0） |
 
 ## 工作原理
 

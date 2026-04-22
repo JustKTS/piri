@@ -1,5 +1,7 @@
+pub mod edge_pulse_renderer;
 pub mod empty;
 pub mod mark;
+pub mod render;
 pub mod scratchpads;
 pub mod singleton;
 pub mod sticky;

@@ -176,6 +176,18 @@ parent_app_id='.*ghostty.*'
 auto_width = ["100%", "50%", "33.33%", "25%", "20%"]
 # auto_maximize: automatically maximize window when there's only one window, and unmaximize when there are multiple windows
 # auto_maximize = true
+# EdgePulse: show left/right edge hint when focused column reaches the workspace edge
+# [piri.workspace_rule.edge_pulse]
+# enabled = true
+# show_left = true
+# show_right = true
+# width = 14
+# height_ratio = 0.42
+# left_gradient_start = "#68d8ff"
+# left_gradient_end = "#1f4fff"
+# right_gradient_start = "#ffd36a"
+# right_gradient_end = "#ff7a1f"
+# alpha = 0.85
 
 # Workspace-specific configuration (overrides default)
 [workspace_rule.1]

@@ -8,8 +8,9 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::time::Duration;
 
-use crate::config::{Config, WorkspaceRuleConfig, WorkspaceRuleSection};
+use crate::config::{Config, EdgePulseConfig, WorkspaceRuleConfig, WorkspaceRuleSection};
 use crate::niri::NiriIpc;
+use crate::plugins::edge_pulse_renderer::{EdgePulseRenderState, EdgePulseRenderer};
 use crate::plugins::window_utils::perform_swallow;
 use crate::plugins::FromConfig;
 use crate::utils::Throttle;
@@ -45,12 +46,13 @@ impl FromConfig for WorkspaceRulePluginConfig {
         let has_default = !config.piri.workspace_rule.auto_width.is_empty()
             || config.piri.workspace_rule.auto_tile
             || config.piri.workspace_rule.auto_fill
-            || config.piri.workspace_rule.auto_maximize;
+            || config.piri.workspace_rule.auto_maximize
+            || config.piri.workspace_rule.edge_pulse.enabled;
         let has_workspaces = !config.workspace_rule.is_empty()
             || config
                 .workspace_rule
                 .values()
-                .any(|c| c.auto_tile || c.auto_fill || c.auto_maximize);
+                .any(|c| c.auto_tile || c.auto_fill || c.auto_maximize || c.edge_pulse.enabled);
 
         if !has_default && !has_workspaces {
             return None;
@@ -72,9 +74,24 @@ pub struct WorkspaceRulePlugin {
     maximized_windows: HashSet<u64>,
     apply_widths_throttle: Arc<Mutex<Throttle>>,
     autofill_executing: Arc<Mutex<bool>>,
+    edge_pulse_last_render: Option<EdgePulseRenderState>,
+    edge_pulse_renderer: EdgePulseRenderer,
 }
 
 impl WorkspaceRulePlugin {
+    fn hide_edge_pulse(&mut self) -> Result<()> {
+        let hidden = EdgePulseRenderState {
+            show_left: false,
+            show_right: false,
+        };
+        if self.edge_pulse_last_render != Some(hidden) {
+            self.edge_pulse_renderer
+                .render(hidden, &self.config.default.edge_pulse, None, 1)?;
+            self.edge_pulse_last_render = Some(hidden);
+        }
+        Ok(())
+    }
+
     fn parse_width(width_str: &str) -> Result<f64> {
         let percent = width_str
             .strip_suffix('%')
@@ -170,6 +187,144 @@ impl WorkspaceRulePlugin {
             .get(workspace_name)
             .map(|c| c.auto_maximize)
             .unwrap_or(self.config.default.auto_maximize)
+    }
+
+    fn get_edge_pulse_config(&self, workspace_name: &str) -> &EdgePulseConfig {
+        self.config
+            .workspaces
+            .get(workspace_name)
+            .map(|c| &c.edge_pulse)
+            .unwrap_or(&self.config.default.edge_pulse)
+    }
+
+    fn collect_workspace_columns(
+        windows: &[crate::niri::Window],
+        workspace_name: &str,
+    ) -> Vec<usize> {
+        let mut columns: Vec<usize> = windows
+            .iter()
+            .filter(|w| {
+                !w.floating
+                    && (w.workspace.as_deref() == Some(workspace_name)
+                        || w.workspace_id.map(|id| id.to_string()).as_deref()
+                            == Some(workspace_name))
+            })
+            .filter_map(|w| {
+                w.layout
+                    .as_ref()
+                    .and_then(|layout| layout.pos_in_scrolling_layout)
+                    .map(|(column, _)| column)
+            })
+            .collect();
+
+        columns.sort_unstable();
+        columns.dedup();
+        columns
+    }
+
+    async fn sync_edge_pulse_indicator(&mut self) -> Result<()> {
+        let current_ws = self.niri.get_focused_workspace().await?;
+        let ws_name = current_ws.name;
+        let edge_cfg = self.get_edge_pulse_config(&ws_name).clone();
+
+        if !edge_cfg.enabled {
+            if self.edge_pulse_last_render.take().is_some() {
+                info!(
+                    "EdgePulse disabled in workspace {}, hiding indicator",
+                    ws_name
+                );
+            }
+            self.hide_edge_pulse()?;
+            return Ok(());
+        }
+
+        let Some(focused_window_id) = self.niri.get_focused_window_id().await? else {
+            self.hide_edge_pulse()?;
+            return Ok(());
+        };
+
+        let windows = self.niri.get_windows().await?;
+        let columns = Self::collect_workspace_columns(&windows, &ws_name);
+
+        // Single column — no edge indicators needed
+        if columns.len() <= 1 {
+            self.hide_edge_pulse()?;
+            return Ok(());
+        }
+
+        let focused_col = windows
+            .iter()
+            .find(|w| {
+                w.id == focused_window_id
+                    && !w.floating
+                    && (w.workspace.as_deref() == Some(ws_name.as_str())
+                        || w.workspace_id.map(|id| id.to_string()).as_deref()
+                            == Some(ws_name.as_str()))
+            })
+            .and_then(|w| w.layout.as_ref())
+            .and_then(|layout| layout.pos_in_scrolling_layout.map(|(col, _)| col));
+
+        let Some(focused_col) = focused_col else {
+            // Focused window is floating or not tiled — keep current indicator state
+            if windows.iter().any(|w| {
+                w.id == focused_window_id
+                    && w.floating
+                    && (w.workspace.as_deref() == Some(ws_name.as_str())
+                        || w.workspace_id.map(|id| id.to_string()).as_deref()
+                            == Some(ws_name.as_str()))
+            }) {
+                return Ok(());
+            }
+            self.hide_edge_pulse()?;
+            return Ok(());
+        };
+
+        let has_left = columns.iter().any(|col| *col < focused_col);
+        let has_right = columns.iter().any(|col| *col > focused_col);
+
+        let state = EdgePulseRenderState {
+            show_left: edge_cfg.show_left && !has_left,
+            show_right: edge_cfg.show_right && !has_right,
+        };
+
+        if self.edge_pulse_last_render == Some(state) {
+            return Ok(());
+        }
+
+        self.edge_pulse_last_render = Some(state);
+        let focused_output = self.niri.get_focused_output().await.ok();
+        let target_output_name = focused_output.as_ref().map(|o| o.name.clone());
+        let output_height = focused_output
+            .as_ref()
+            .and_then(|o| o.logical.as_ref().map(|l| l.height as i32))
+            .unwrap_or(1080);
+        self.edge_pulse_renderer.render(
+            state,
+            &edge_cfg,
+            target_output_name.as_deref(),
+            output_height,
+        )?;
+        info!(
+            "EdgePulse {} => left={}, right={}, ws={}, focused_col={}, style(width={}, height_ratio={}, alpha={}, left=[{} -> {}], right=[{} -> {}])",
+            if state.show_left || state.show_right {
+                "show"
+            } else {
+                "hide"
+            },
+            state.show_left,
+            state.show_right,
+            ws_name,
+            focused_col,
+            edge_cfg.width,
+            edge_cfg.height_ratio,
+            edge_cfg.alpha,
+            edge_cfg.left_gradient_start,
+            edge_cfg.left_gradient_end,
+            edge_cfg.right_gradient_start,
+            edge_cfg.right_gradient_end
+        );
+
+        Ok(())
     }
 
     /// Handle auto_tile logic: merge new windows into existing columns (except first column)
@@ -475,6 +630,7 @@ impl WorkspaceRulePlugin {
 
         // Always execute auto_fill at the end if enabled
         self.try_execute_autofill(ws_name, "window opened or changed").await?;
+        self.sync_edge_pulse_indicator().await?;
 
         Ok(())
     }
@@ -491,6 +647,7 @@ impl WorkspaceRulePlugin {
         let current_ws = self.niri.get_focused_workspace().await?;
         let ws_name = &current_ws.name;
         self.try_execute_autofill(ws_name, "window closed").await?;
+        self.sync_edge_pulse_indicator().await?;
 
         Ok(())
     }
@@ -514,6 +671,8 @@ impl crate::plugins::Plugin for WorkspaceRulePlugin {
             maximized_windows: HashSet::new(),
             apply_widths_throttle: Arc::new(Mutex::new(Throttle::new())),
             autofill_executing: Arc::new(Mutex::new(false)),
+            edge_pulse_last_render: None,
+            edge_pulse_renderer: EdgePulseRenderer::new(),
         }
     }
 
@@ -525,6 +684,14 @@ impl crate::plugins::Plugin for WorkspaceRulePlugin {
             Event::WindowClosed { id } => {
                 self.handle_window_closed(*id).await?;
             }
+            Event::WindowFocusChanged { id: Some(_) } => {
+                self.sync_edge_pulse_indicator().await?;
+            }
+            Event::WorkspaceActivated { .. } => {
+                // Force re-evaluation on workspace switch; style and geometry may differ by workspace.
+                self.edge_pulse_last_render = None;
+                self.sync_edge_pulse_indicator().await?;
+            }
             _ => {}
         }
         Ok(())
@@ -533,13 +700,18 @@ impl crate::plugins::Plugin for WorkspaceRulePlugin {
     fn is_interested_in_event(&self, event: &Event) -> bool {
         matches!(
             event,
-            Event::WindowOpenedOrChanged { .. } | Event::WindowClosed { .. }
+            Event::WindowOpenedOrChanged { .. }
+                | Event::WindowClosed { .. }
+                | Event::WindowFocusChanged { id: Some(_) }
+                | Event::WorkspaceActivated { .. }
         )
     }
 
     async fn update_config(&mut self, config: WorkspaceRulePluginConfig) -> Result<()> {
         info!("Updating workspace rule plugin configuration");
         self.config = config;
+        self.edge_pulse_last_render = None;
+        self.edge_pulse_renderer.shutdown();
         Ok(())
     }
 }
