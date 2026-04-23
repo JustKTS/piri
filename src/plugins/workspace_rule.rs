@@ -197,18 +197,10 @@ impl WorkspaceRulePlugin {
             .unwrap_or(&self.config.default.edge_pulse)
     }
 
-    fn collect_workspace_columns(
-        windows: &[crate::niri::Window],
-        workspace_name: &str,
-    ) -> Vec<usize> {
+    fn collect_workspace_columns_by_id(windows: &[crate::niri::Window], ws_id: u64) -> Vec<usize> {
         let mut columns: Vec<usize> = windows
             .iter()
-            .filter(|w| {
-                !w.floating
-                    && (w.workspace.as_deref() == Some(workspace_name)
-                        || w.workspace_id.map(|id| id.to_string()).as_deref()
-                            == Some(workspace_name))
-            })
+            .filter(|w| !w.floating && w.workspace_id == Some(ws_id))
             .filter_map(|w| {
                 w.layout
                     .as_ref()
@@ -222,9 +214,28 @@ impl WorkspaceRulePlugin {
         columns
     }
 
-    async fn sync_edge_pulse_indicator(&mut self) -> Result<()> {
-        let current_ws = self.niri.get_focused_workspace().await?;
-        let ws_name = current_ws.name;
+    async fn sync_edge_pulse_indicator(&mut self, workspace_id: Option<u64>) -> Result<()> {
+        // Resolve both workspace name (for config lookup) and ID (for window filtering).
+        // Workspace ID is globally unique; idx is per-output and not unique across monitors.
+        let (ws_name, ws_id) = if let Some(id) = workspace_id {
+            let workspaces = self.niri.get_workspaces().await?;
+            match workspaces.into_iter().find(|ws| ws.id == id) {
+                Some(ws) => (ws.idx.to_string(), ws.id),
+                None => {
+                    self.hide_edge_pulse()?;
+                    return Ok(());
+                }
+            }
+        } else {
+            let workspaces = self.niri.get_workspaces().await?;
+            match workspaces.into_iter().find(|ws| ws.is_focused) {
+                Some(ws) => (ws.idx.to_string(), ws.id),
+                None => {
+                    self.hide_edge_pulse()?;
+                    return Ok(());
+                }
+            }
+        };
         let edge_cfg = self.get_edge_pulse_config(&ws_name).clone();
 
         if !edge_cfg.enabled {
@@ -244,7 +255,7 @@ impl WorkspaceRulePlugin {
         };
 
         let windows = self.niri.get_windows().await?;
-        let columns = Self::collect_workspace_columns(&windows, &ws_name);
+        let columns = Self::collect_workspace_columns_by_id(&windows, ws_id);
 
         // Single column — no edge indicators needed
         if columns.len() <= 1 {
@@ -254,25 +265,16 @@ impl WorkspaceRulePlugin {
 
         let focused_col = windows
             .iter()
-            .find(|w| {
-                w.id == focused_window_id
-                    && !w.floating
-                    && (w.workspace.as_deref() == Some(ws_name.as_str())
-                        || w.workspace_id.map(|id| id.to_string()).as_deref()
-                            == Some(ws_name.as_str()))
-            })
+            .find(|w| w.id == focused_window_id && !w.floating && w.workspace_id == Some(ws_id))
             .and_then(|w| w.layout.as_ref())
             .and_then(|layout| layout.pos_in_scrolling_layout.map(|(col, _)| col));
 
         let Some(focused_col) = focused_col else {
             // Focused window is floating or not tiled — keep current indicator state
-            if windows.iter().any(|w| {
-                w.id == focused_window_id
-                    && w.floating
-                    && (w.workspace.as_deref() == Some(ws_name.as_str())
-                        || w.workspace_id.map(|id| id.to_string()).as_deref()
-                            == Some(ws_name.as_str()))
-            }) {
+            if windows
+                .iter()
+                .any(|w| w.id == focused_window_id && w.floating && w.workspace_id == Some(ws_id))
+            {
                 return Ok(());
             }
             self.hide_edge_pulse()?;
@@ -630,7 +632,7 @@ impl WorkspaceRulePlugin {
 
         // Always execute auto_fill at the end if enabled
         self.try_execute_autofill(ws_name, "window opened or changed").await?;
-        self.sync_edge_pulse_indicator().await?;
+        self.sync_edge_pulse_indicator(None).await?;
 
         Ok(())
     }
@@ -647,7 +649,7 @@ impl WorkspaceRulePlugin {
         let current_ws = self.niri.get_focused_workspace().await?;
         let ws_name = &current_ws.name;
         self.try_execute_autofill(ws_name, "window closed").await?;
-        self.sync_edge_pulse_indicator().await?;
+        self.sync_edge_pulse_indicator(None).await?;
 
         Ok(())
     }
@@ -685,12 +687,12 @@ impl crate::plugins::Plugin for WorkspaceRulePlugin {
                 self.handle_window_closed(*id).await?;
             }
             Event::WindowFocusChanged { id: Some(_) } => {
-                self.sync_edge_pulse_indicator().await?;
+                self.sync_edge_pulse_indicator(None).await?;
             }
-            Event::WorkspaceActivated { .. } => {
+            Event::WorkspaceActivated { id, focused: true } => {
                 // Force re-evaluation on workspace switch; style and geometry may differ by workspace.
                 self.edge_pulse_last_render = None;
-                self.sync_edge_pulse_indicator().await?;
+                self.sync_edge_pulse_indicator(Some(*id)).await?;
             }
             _ => {}
         }
