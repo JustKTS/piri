@@ -59,6 +59,25 @@ size = "60% 80%"
 margin = 50
 swallow_to_focus = true  # Optional: swallow into focused window when shown
 
+# Example: scratchpad with sticky behavior (delegates to sticky plugin)
+[scratchpads.note]
+direction = "fromTop"
+command = "gnome-text-editor"
+app_id = "org.gnome.TextEditor"
+size = "50% 40%"
+margin = 100
+sticky = true  # Optional: follow focused workspace (handled by sticky plugin)
+
+# Example: scratchpad that auto-hides when focus is lost
+# Note: sticky and auto_hide_on_focus_loss cannot both be enabled
+[scratchpads.calc]
+direction = "fromBottom"
+command = "gnome-calculator"
+app_id = "org.gnome.Calculator"
+size = "30% 40%"
+margin = 50
+auto_hide_on_focus_loss = true  # Optional: auto-hide when window loses focus
+
 
 # Window rules: automatically move windows to workspaces based on app_id or title
 # Format: [[window_rule]]

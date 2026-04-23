@@ -11,10 +11,12 @@ use crate::config::{Config, Direction, ScratchpadConfig};
 use crate::ipc::IpcRequest;
 use crate::niri::NiriIpc;
 use crate::plugins::window_utils::{
-    self, get_focused_window, perform_swallow, WindowMatcher, WindowMatcherCache,
+    self, get_focused_window, perform_swallow, register_sticky_window, WindowMatcher,
+    WindowMatcherCache,
 };
 use crate::plugins::FromConfig;
 use crate::utils::send_notification;
+use niri_ipc::Event;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScratchpadsPluginConfig {
@@ -353,6 +355,11 @@ impl ScratchpadManager {
         let state = self.states.get_mut(name).unwrap();
         state.window_id = Some(window_id);
 
+        // Delegate sticky behavior to the sticky plugin via global registry
+        if config.sticky {
+            register_sticky_window(window_id, true);
+        }
+
         Ok(window_id)
     }
 
@@ -462,6 +469,8 @@ impl ScratchpadManager {
             size: default_size.to_string(),
             margin: default_margin,
             swallow_to_focus,
+            sticky: false,
+            auto_hide_on_focus_loss: false,
         };
 
         self.setup_window(window.id, &config).await?;
@@ -477,6 +486,35 @@ impl ScratchpadManager {
             },
         );
 
+        Ok(())
+    }
+
+    // Sticky behavior is delegated to the sticky plugin via global registry.
+    // Scratchpads only register/unregister windows; sticky plugin handles workspace following.
+
+    async fn handle_focus_loss(
+        &mut self,
+        window_id: u64,
+        move_to_workspace: Option<String>,
+    ) -> Result<()> {
+        let names_to_hide: Vec<String> = self
+            .states
+            .iter()
+            .filter(|(_, state)| {
+                state.config.auto_hide_on_focus_loss
+                    && state.is_visible
+                    && state.window_id.is_some()
+                    && state.window_id != Some(window_id)
+            })
+            .map(|(name, _)| name.clone())
+            .collect();
+
+        for name in names_to_hide {
+            debug!("Auto-hiding scratchpad '{}' via toggle", name);
+            if let Err(e) = self.toggle(&name, None, move_to_workspace.clone()).await {
+                warn!("Failed to auto-hide scratchpad '{}': {}", name, e);
+            }
+        }
         Ok(())
     }
 }
@@ -590,5 +628,25 @@ impl crate::plugins::Plugin for ScratchpadsPlugin {
             }
             _ => Ok(None), // Not handled by this plugin
         }
+    }
+
+    async fn handle_event(&mut self, event: &Event, _niri: &NiriIpc) -> Result<()> {
+        // Scratchpads only handle auto_hide_on_focus_loss; sticky is delegated to sticky plugin
+        if let Event::WindowFocusChanged {
+            id: Some(window_id),
+        } = event
+        {
+            self.manager
+                .handle_focus_loss(*window_id, self.config.move_to_workspace.clone())
+                .await?;
+        }
+        Ok(())
+    }
+
+    fn is_interested_in_event(&self, event: &Event) -> bool {
+        // Only interested in WindowFocusChanged for auto_hide_on_focus_loss
+        // Sticky behavior is handled entirely by the sticky plugin via global registry
+        matches!(event, Event::WindowFocusChanged { id: Some(_) })
+            && self.manager.states.values().any(|s| s.config.auto_hide_on_focus_loss)
     }
 }

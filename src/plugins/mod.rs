@@ -221,6 +221,10 @@ impl PluginManager {
             }
 
             // Connection closed or error - will reconnect in outer loop
+            // Refresh outputs cache since state may have changed during disconnection
+            if let Err(e) = niri.refresh_outputs().await {
+                log::warn!("Failed to refresh outputs cache on reconnect: {}", e);
+            }
             warn!("Event stream closed, reconnecting...");
             tokio::time::sleep(Duration::from_millis(1000)).await;
         }

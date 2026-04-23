@@ -318,6 +318,12 @@ pub struct ScratchpadConfig {
     /// If true, swallow the scratchpad window to the focused window when shown
     #[serde(default)]
     pub swallow_to_focus: bool,
+    /// If true, scratchpad will follow the focused workspace (delegated to sticky plugin)
+    #[serde(default)]
+    pub sticky: bool,
+    /// If true, scratchpad will automatically hide when it loses focus
+    #[serde(default)]
+    pub auto_hide_on_focus_loss: bool,
 }
 
 impl ScratchpadConfig {
@@ -624,6 +630,17 @@ impl TryFrom<toml::Table> for ScratchpadConfig {
         let swallow_to_focus =
             table.get("swallow_to_focus").and_then(|v| v.as_bool()).unwrap_or(false);
 
+        let sticky = table.get("sticky").and_then(|v| v.as_bool()).unwrap_or(false);
+
+        let auto_hide_on_focus_loss =
+            table.get("auto_hide_on_focus_loss").and_then(|v| v.as_bool()).unwrap_or(false);
+
+        if sticky && auto_hide_on_focus_loss {
+            anyhow::bail!(
+                "'sticky' and 'auto_hide_on_focus_loss' cannot both be enabled for a scratchpad"
+            );
+        }
+
         Ok(ScratchpadConfig {
             direction,
             command,
@@ -631,6 +648,8 @@ impl TryFrom<toml::Table> for ScratchpadConfig {
             size,
             margin,
             swallow_to_focus,
+            sticky,
+            auto_hide_on_focus_loss,
         })
     }
 }

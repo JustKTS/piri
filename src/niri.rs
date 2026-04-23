@@ -4,6 +4,7 @@ use niri_ipc::{
     WorkspaceReferenceArg,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -18,6 +19,7 @@ pub struct NiriIpc {
 struct NiriIpcInner {
     socket_path: Mutex<Option<PathBuf>>,
     socket: Mutex<Option<Socket>>,
+    outputs: Mutex<HashMap<String, niri_ipc::Output>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,12 +82,14 @@ pub struct Workspace {
 
 impl NiriIpc {
     pub fn new(socket_path: Option<String>) -> Self {
-        let path = socket_path.map(PathBuf::from);
+        let map = socket_path.map(PathBuf::from);
+        let path = map;
 
         Self {
             inner: Arc::new(NiriIpcInner {
                 socket_path: Mutex::new(path),
                 socket: Mutex::new(None),
+                outputs: Mutex::new(HashMap::new()),
             }),
         }
     }
@@ -490,6 +494,27 @@ impl NiriIpc {
             )
         })?;
         Ok((logical.width, logical.height))
+    }
+
+    /// Get the output size for a specific output by name (from cache, sync)
+    pub fn get_output_size_by_name(&self, output_name: &str) -> Option<(u32, u32)> {
+        let outputs = self.inner.outputs.lock().unwrap();
+        if let Some(output) = outputs.get(output_name) {
+            if let Some(ref logical) = output.logical {
+                return Some((logical.width, logical.height));
+            }
+        }
+        None
+    }
+
+    /// Refresh outputs cache from niri IPC (call on startup and on output change events)
+    pub async fn refresh_outputs(&self) -> Result<()> {
+        let outputs = match self.send_request(Request::Outputs).await? {
+            Response::Outputs(outputs) => outputs,
+            _ => anyhow::bail!("Unexpected response type for Outputs request"),
+        };
+        *self.inner.outputs.lock().unwrap() = outputs;
+        Ok(())
     }
     /// Returns (x, y, width, height) if available
     /// For floating windows, extracts position from layout.tile_pos_in_workspace_view

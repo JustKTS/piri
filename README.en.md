@@ -127,7 +127,7 @@ piri completion fish > ~/.config/fish/completions/piri.fish
 
 ![Scratchpads](./assets/scratchpads.mp4)
 
-Quickly show and hide windows of frequently used applications. Supports cross-workspace and cross-monitor, so you can quickly access your scratchpad windows regardless of which workspace or monitor you're on. Features **dynamic window addition**, **automatic retention of manual size and margin adjustments**, **automatic moving to a specific workspace when hidden**, and **swallowing window into the currently focused window** (`swallow_to_focus` option).
+Quickly show and hide windows of frequently used applications. Supports cross-workspace and cross-monitor, so you can quickly access your scratchpad windows regardless of which workspace or monitor you're on. Features **dynamic window addition**, **automatic retention of manual size and margin adjustments**, **automatic moving to a specific workspace when hidden**, **swallowing window into the currently focused window** (`swallow_to_focus` option), **sticky behavior** (`sticky` option, delegated to sticky plugin), and **auto-hide on focus loss** (`auto_hide_on_focus_loss` option).
 
 **Configuration Example**:
 ```toml
@@ -153,7 +153,25 @@ app_id = "imv"
 size = "60% 80%"
 margin = 50
 swallow_to_focus = true  # Automatically swallow into focused window when shown
+
+[scratchpads.note]
+direction = "fromTop"
+command = "gnome-text-editor"
+app_id = "org.gnome.TextEditor"
+size = "50% 40%"
+margin = 100
+sticky = true  # Follow focused workspace (handled by sticky plugin)
+
+[scratchpads.calc]
+direction = "fromBottom"
+command = "gnome-calculator"
+app_id = "org.gnome.Calculator"
+size = "30% 40%"
+margin = 50
+auto_hide_on_focus_loss = true  # Auto-hide when window loses focus
 ```
+
+> **Note**: `sticky` and `auto_hide_on_focus_loss` cannot both be enabled for the same scratchpad.
 
 **Quick Usage**:
 ```bash

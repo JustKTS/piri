@@ -35,6 +35,22 @@ app_id = "imv"
 size = "60% 80%"
 margin = 50
 swallow_to_focus = true  # 显示时自动吞入当前聚焦的窗口
+
+[scratchpads.note]
+direction = "fromTop"
+command = "gnome-text-editor"
+app_id = "org.gnome.TextEditor"
+size = "50% 40%"
+margin = 100
+sticky = true  # 跟随焦点工作区（由 sticky 插件处理）
+
+[scratchpads.calc2]
+direction = "fromBottom"
+command = "gnome-calculator"
+app_id = "org.gnome.Calculator"
+size = "30% 40%"
+margin = 50
+auto_hide_on_focus_loss = true  # 失去焦点时自动隐藏
 ```
 
 ### 配置参数
@@ -49,6 +65,10 @@ swallow_to_focus = true  # 显示时自动吞入当前聚焦的窗口
 - `size` (必需): 窗口大小，格式为 `"width% height%"`
 - `margin` (必需): 距离屏幕边缘的边距（像素）
 - `swallow_to_focus` (可选): 如果为 `true`，显示时将 scratchpad 窗口吞入当前聚焦的窗口。隐藏时会先让窗口浮动，再执行正常的隐藏逻辑。默认为 `false`
+- `sticky` (可选): 如果为 `true`，scratchpad 窗口将跟随焦点工作区（类似 sticky 窗口）。此行为通过全局注册表委托给 sticky 插件处理；scratchpads 仅负责注册窗口。默认为 `false`
+- `auto_hide_on_focus_loss` (可选): 如果为 `true`，scratchpad 窗口在失去焦点时会自动隐藏。默认为 `false`
+
+> **注意**: 同一个 scratchpad 不能同时启用 `sticky` 和 `auto_hide_on_focus_loss`。尝试这样做将导致配置错误。
 
 > **窗口匹配**: `app_id` 使用正则表达式匹配。关于窗口匹配机制的详细说明（包括特殊字符转义），请参阅 [窗口匹配机制文档](../window_matching.md) 和 [插件系统通用配置说明](plugins.md#通用配置说明)
 
@@ -111,3 +131,5 @@ piri scratchpads mypad add fromRight --swallow-to-focus  # 启用 swallow 功能
 - ✅ **灵活配置**: 自定义窗口大小、位置和动画方向
 - ✅ **动态添加**: 快速添加当前窗口为 scratchpad
 - ✅ **Swallow 集成**: 支持将 scratchpad 窗口吞入当前聚焦的窗口（`swallow_to_focus` 选项）
+- ✅ **Sticky 行为**: 通过 sticky 插件集成跟随焦点工作区（`sticky` 选项）
+- ✅ **失去焦点自动隐藏**: 窗口失去焦点时自动隐藏（`auto_hide_on_focus_loss` 选项）

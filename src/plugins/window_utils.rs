@@ -4,10 +4,43 @@ use niri_ipc::{Action, ColumnDisplay, Reply, Request, WorkspaceReferenceArg};
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::process::{Command, Stdio};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 use std::time::Instant;
 use tokio::sync::Mutex;
 use tokio::time::Duration;
+
+// ---------------------------------------------------------------------------
+// Global sticky window registry — shared between sticky plugin & scratchpads
+// ---------------------------------------------------------------------------
+
+/// Global registry of windows that should follow the focused workspace.
+/// Maps window_id -> cross_monitor flag.
+static STICKY_REGISTRY: OnceLock<StdMutex<HashMap<u64, bool>>> = OnceLock::new();
+
+fn sticky_registry() -> &'static StdMutex<HashMap<u64, bool>> {
+    STICKY_REGISTRY.get_or_init(|| StdMutex::new(HashMap::new()))
+}
+
+/// Register a window as sticky. Called by scratchpads when creating a sticky
+/// scratchpad, or by sticky plugin via IPC.
+pub fn register_sticky_window(window_id: u64, cross_monitor: bool) {
+    sticky_registry().lock().unwrap().insert(window_id, cross_monitor);
+    debug!(
+        "Sticky registry: registered window {} (cross={})",
+        window_id, cross_monitor
+    );
+}
+
+/// Unregister a sticky window.
+pub fn unregister_sticky_window(window_id: u64) {
+    sticky_registry().lock().unwrap().remove(&window_id);
+    debug!("Sticky registry: unregistered window {}", window_id);
+}
+
+/// Snapshot of all registered sticky windows.
+pub fn get_sticky_windows() -> HashMap<u64, bool> {
+    sticky_registry().lock().unwrap().clone()
+}
 
 use crate::config::Direction;
 use crate::niri::NiriIpc;
@@ -430,6 +463,105 @@ pub async fn move_window_to_position(
 
     niri.move_window_relative(window_id, rel_x, rel_y).await?;
     Ok(())
+}
+
+/// Result of sticky_follow_workspace
+pub enum StickyFollowResult {
+    /// Window was moved or already in place, sticky state should be kept
+    Keep,
+    /// Window no longer exists, sticky state should be cleared
+    WindowGone,
+    /// Window is no longer floating, sticky state should be cleared
+    NotFloating,
+    /// Window moved to a different output; callers should resize/reposition
+    OutputChanged {
+        old_output_width: u32,
+        old_output_height: u32,
+        new_output_width: u32,
+        new_output_height: u32,
+    },
+}
+
+/// Shared sticky follow logic: move a floating window to the focused workspace.
+/// Used by both StickyPlugin and ScratchpadManager.
+/// Returns a StickyFollowResult indicating whether the sticky state should be kept or cleared.
+pub async fn sticky_follow_workspace(
+    niri: &NiriIpc,
+    window_id: u64,
+    cross_monitor: bool,
+) -> Result<StickyFollowResult> {
+    let windows = niri.get_windows().await?;
+    let window = match windows.iter().find(|w| w.id == window_id) {
+        Some(w) => w,
+        None => {
+            warn!("Sticky window {} no longer exists", window_id);
+            return Ok(StickyFollowResult::WindowGone);
+        }
+    };
+
+    if !window.floating {
+        warn!("Sticky window {} is no longer floating", window_id);
+        return Ok(StickyFollowResult::NotFloating);
+    }
+
+    let window_workspace_id = window.workspace_id;
+
+    if cross_monitor {
+        let old_output_name = if let Some(ws_id) = window_workspace_id {
+            let ws_list = niri.get_workspaces_for_mapping().await?;
+            ws_list.iter().find(|ws| ws.id == ws_id).and_then(|ws| ws.output.clone())
+        } else {
+            None
+        };
+
+        // Get old output size
+        let (old_ow, old_oh) = if let Some(ref name) = old_output_name {
+            niri.get_output_size_by_name(name).unwrap_or((0, 0))
+        } else {
+            (0, 0)
+        };
+
+        // Move to focused output
+        niri.move_floating_window(window_id).await?;
+
+        // Get new output size (focused output is now the target)
+        let (new_ow, new_oh) = niri.get_output_size().await?;
+
+        // If output actually changed dimensions, signal caller
+        if old_ow > 0 && old_oh > 0 && (old_ow != new_ow || old_oh != new_oh) {
+            return Ok(StickyFollowResult::OutputChanged {
+                old_output_width: old_ow,
+                old_output_height: old_oh,
+                new_output_width: new_ow,
+                new_output_height: new_oh,
+            });
+        }
+
+        return Ok(StickyFollowResult::Keep);
+    }
+
+    let focused_workspace = niri.get_focused_workspace().await?;
+    let workspaces = niri.get_workspaces_for_mapping().await?;
+
+    let target_workspace = workspaces
+        .iter()
+        .find(|ws| ws.idx.to_string() == focused_workspace.name)
+        .context("Focused workspace not found in workspace list")?;
+
+    if let Some(ws_id) = window_workspace_id {
+        if let Some(source_workspace) = workspaces.iter().find(|ws| ws.id == ws_id) {
+            if source_workspace.output != target_workspace.output {
+                debug!(
+                    "Sticky skip move: cross=false and output differs (from {:?} to {:?})",
+                    source_workspace.output, target_workspace.output
+                );
+                return Ok(StickyFollowResult::Keep);
+            }
+        }
+    }
+
+    niri.move_window_to_workspace(window_id, &focused_workspace.name).await?;
+    Ok(StickyFollowResult::Keep)
 }
 
 /// Check if a window matches the given matcher (with optional exclude patterns)

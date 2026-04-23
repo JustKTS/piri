@@ -1,12 +1,12 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use async_trait::async_trait;
-use log::{debug, info, warn};
+use log::{debug, info};
 use niri_ipc::Event;
 
 use crate::config::Config;
 use crate::ipc::IpcRequest;
 use crate::niri::NiriIpc;
-use crate::plugins::window_utils;
+use crate::plugins::window_utils::{self, StickyFollowResult};
 use crate::plugins::FromConfig;
 
 #[derive(Debug, Clone, Default)]
@@ -20,96 +20,80 @@ impl FromConfig for StickyPluginConfig {
 
 pub struct StickyPlugin {
     niri: NiriIpc,
-    sticky_window_id: Option<u64>,
-    cross_monitor: bool,
 }
 
 impl StickyPlugin {
     fn new(niri: NiriIpc) -> Self {
         info!("Sticky plugin initialized");
-        Self {
-            niri,
-            sticky_window_id: None,
-            cross_monitor: false,
-        }
+        Self { niri }
     }
 
-    async fn add(&mut self, cross: bool) -> Result<()> {
+    /// Add the focused window as sticky via the global registry.
+    async fn add(&self, cross_monitor: bool) -> Result<()> {
         let window = window_utils::get_focused_window(&self.niri).await?;
         if !window.floating {
             anyhow::bail!("Focused window is not floating. Sticky only supports floating windows.");
         }
-
-        self.sticky_window_id = Some(window.id);
-        self.cross_monitor = cross;
-        info!(
-            "Sticky add: window_id={}, cross_monitor={}",
-            window.id, cross
-        );
+        window_utils::register_sticky_window(window.id, cross_monitor);
         Ok(())
     }
 
-    fn delete(&mut self) {
-        self.sticky_window_id = None;
-        self.cross_monitor = false;
-        info!("Sticky deleted");
+    /// Remove the focused window from the sticky registry.
+    async fn delete(&self) -> Result<()> {
+        let window = window_utils::get_focused_window(&self.niri).await?;
+        window_utils::unregister_sticky_window(window.id);
+        Ok(())
     }
 
-    async fn follow_focused_workspace(&mut self) -> Result<()> {
-        let Some(window_id) = self.sticky_window_id else {
-            return Ok(());
-        };
+    /// Follow the focused workspace for all registered sticky windows.
+    async fn follow_focused_workspace(&self) -> Result<()> {
+        let windows = window_utils::get_sticky_windows();
+        for (window_id, cross_monitor) in windows {
+            // Get window position/size before the move (for proportional resize)
+            let pre_move = self.niri.get_window_position_async(window_id).await?;
 
-        let windows = self.niri.get_windows().await?;
-        let window = match windows.into_iter().find(|w| w.id == window_id) {
-            Some(w) => w,
-            None => {
-                warn!(
-                    "Sticky window {} no longer exists, clearing state",
-                    window_id
-                );
-                self.delete();
-                return Ok(());
-            }
-        };
-
-        if !window.floating {
-            warn!(
-                "Sticky window {} is no longer floating, clearing sticky state",
-                window_id
-            );
-            self.delete();
-            return Ok(());
-        }
-
-        if self.cross_monitor {
-            self.niri.move_floating_window(window_id).await?;
-            return Ok(());
-        }
-
-        let focused_workspace = self.niri.get_focused_workspace().await?;
-        let workspaces = self.niri.get_workspaces_for_mapping().await?;
-
-        let target_workspace = workspaces
-            .iter()
-            .find(|ws| ws.idx.to_string() == focused_workspace.name)
-            .context("Focused workspace not found in workspace list")?;
-
-        if let Some(window_workspace_id) = window.workspace_id {
-            if let Some(source_workspace) =
-                workspaces.iter().find(|ws| ws.id == window_workspace_id)
+            match window_utils::sticky_follow_workspace(&self.niri, window_id, cross_monitor)
+                .await?
             {
-                if source_workspace.output != target_workspace.output {
-                    debug!(
-                        "Sticky skip move: cross=false and output differs (from {:?} to {:?})",
-                        source_workspace.output, target_workspace.output
-                    );
-                    return Ok(());
+                StickyFollowResult::Keep => {}
+                StickyFollowResult::WindowGone | StickyFollowResult::NotFloating => {
+                    window_utils::unregister_sticky_window(window_id);
+                }
+                StickyFollowResult::OutputChanged {
+                    old_output_width: old_ow,
+                    old_output_height: old_oh,
+                    new_output_width: new_ow,
+                    new_output_height: new_oh,
+                } => {
+                    if let Some((old_x, old_y, old_w, old_h)) = pre_move {
+                        let ratio_w = new_ow as f64 / old_ow as f64;
+                        let ratio_h = new_oh as f64 / old_oh as f64;
+                        let new_w = (old_w as f64 * ratio_w) as u32;
+                        let new_h = (old_h as f64 * ratio_h) as u32;
+                        let new_x = (old_x as f64 * ratio_w) as i32;
+                        let new_y = (old_y as f64 * ratio_h) as i32;
+
+                        debug!(
+                            "Sticky proportional resize: ({},{}) {}x{} -> ({},{}) {}x{} (output {}x{} -> {}x{})",
+                            old_x, old_y, old_w, old_h, new_x, new_y, new_w, new_h,
+                            old_ow, old_oh, new_ow, new_oh
+                        );
+
+                        self.niri.resize_floating_window(window_id, new_w, new_h).await?;
+                        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+                        if let Some((cur_x, cur_y, _, _)) =
+                            self.niri.get_window_position_async(window_id).await?
+                        {
+                            window_utils::move_window_to_position(
+                                &self.niri, window_id, cur_x, cur_y, new_x, new_y,
+                            )
+                            .await?;
+                        }
+                    }
                 }
             }
         }
-
-        self.niri.move_window_to_workspace(window_id, &focused_workspace.name).await?;
         Ok(())
     }
 }
@@ -133,7 +117,7 @@ impl crate::plugins::Plugin for StickyPlugin {
                 Ok(Some(Ok(())))
             }
             IpcRequest::StickyDelete => {
-                self.delete();
+                self.delete().await?;
                 Ok(Some(Ok(())))
             }
             _ => Ok(None),

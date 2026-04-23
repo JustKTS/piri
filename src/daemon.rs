@@ -112,6 +112,16 @@ async fn run_daemon_loop(
             event_result = event_rx.recv() => {
                 match event_result {
                     Some(event) => {
+                        // Refresh outputs cache on output-related events
+                        if matches!(&event, niri_ipc::Event::WorkspacesChanged { .. } | niri_ipc::Event::ConfigLoaded { .. }) {
+                            let niri_refresh = niri.clone();
+                            tokio::spawn(async move {
+                                if let Err(e) = niri_refresh.refresh_outputs().await {
+                                    log::warn!("Failed to refresh outputs cache: {}", e);
+                                }
+                            });
+                        }
+
                         let pm = plugin_manager.clone();
                         let niri_clone = niri.clone();
                         tokio::spawn(async move {
@@ -175,6 +185,12 @@ async fn run_daemon(mut handler: CommandHandler) -> Result<()> {
     // Initialize plugin manager
     let config = handler.config().clone();
     let niri = handler.niri().clone();
+
+    // Initialize outputs cache at startup
+    if let Err(e) = niri.refresh_outputs().await {
+        warn!("Failed to initialize outputs cache: {}", e);
+    }
+
     let mut plugin_manager = PluginManager::new();
     if let Err(e) = plugin_manager.init(niri.clone(), &config).await {
         warn!("Failed to initialize plugins: {}", e);
