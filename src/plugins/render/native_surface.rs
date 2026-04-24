@@ -8,7 +8,7 @@ use log::debug;
 use std::collections::HashMap;
 
 use wayland_client::protocol::{
-    wl_buffer, wl_compositor, wl_output, wl_registry, wl_shm, wl_shm_pool, wl_surface,
+    wl_buffer, wl_compositor, wl_output, wl_region, wl_registry, wl_shm, wl_shm_pool, wl_surface,
 };
 use wayland_client::{Connection, Dispatch, QueueHandle};
 use wayland_protocols_wlr::layer_shell::v1::client::{zwlr_layer_shell_v1, zwlr_layer_surface_v1};
@@ -384,6 +384,12 @@ fn create_edge_surface(
     layer_surface.set_exclusive_zone(0);
     layer_surface.set_size(width as u32, height as u32);
     layer_surface.set_keyboard_interactivity(zwlr_layer_surface_v1::KeyboardInteractivity::None);
+
+    // Create empty input region for mouse passthrough
+    let region = compositor.create_region(qh, ());
+    wl_surface.set_input_region(Some(&region));
+    wl_surface.commit();
+    region.destroy();
 
     debug!(
         "Created native edge surface: side={}, {}x{}",
@@ -802,5 +808,17 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for AppState {
                 }
             }
         }
+    }
+}
+
+impl Dispatch<wl_region::WlRegion, ()> for AppState {
+    fn event(
+        _: &mut Self,
+        _: &wl_region::WlRegion,
+        _: wl_region::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
     }
 }
