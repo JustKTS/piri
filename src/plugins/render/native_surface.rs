@@ -511,8 +511,8 @@ fn apply_request(
     let w = req.width.max(1);
     let h = req.height.max(1);
 
-    // Start animation if requested and not already active
-    if req.animation_t >= 0.0 && !state.animation_active {
+    // Handle animation request: update state and (re)start if needed
+    if req.animation_t >= 0.0 {
         // Create timerfd if needed
         if state.animation_timerfd.is_none() {
             match create_timerfd() {
@@ -522,12 +522,21 @@ fn apply_request(
         }
 
         if let Some(ref tfd) = state.animation_timerfd {
-            state.animation_active = true;
-            state.animation_start = Some(std::time::Instant::now());
+            // Always update the request (may include new sides like right when left was active)
             state.animation_request = Some(req.clone());
-            state.animation_repeat_count = 0;
-            // Set timer to fire at ~60 FPS
-            set_timerfd(tfd, 16.667, 16.667);
+
+            // (Re)start animation if not active, or reset if already running
+            if !state.animation_active {
+                state.animation_active = true;
+                state.animation_start = Some(std::time::Instant::now());
+                state.animation_repeat_count = 0;
+                set_timerfd(tfd, 16.667, 16.667);
+            } else {
+                // Reset animation to start for the new request
+                state.animation_start = Some(std::time::Instant::now());
+                state.animation_repeat_count = 0;
+                set_timerfd(tfd, 16.667, 16.667);
+            }
         }
     } else if req.animation_t < 0.0 {
         // Animation disabled for this request, stop any active animation
