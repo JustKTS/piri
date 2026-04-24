@@ -530,6 +530,21 @@ pub struct EdgePulseConfig {
     /// Global alpha 0.0-1.0.
     #[serde(default = "default_edge_pulse_alpha")]
     pub alpha: f64,
+    /// Enable animation effect (pulse/fade).
+    #[serde(default)]
+    pub animation_enabled: bool,
+    /// Animation style: "pulse" | "fade".
+    #[serde(default = "default_animation_style")]
+    pub animation_style: String,
+    /// Animation duration in milliseconds per cycle.
+    #[serde(default = "default_animation_duration")]
+    pub animation_duration: f64,
+    /// Animation amplitude 0.0-1.0, controls intensity.
+    #[serde(default = "default_animation_amplitude")]
+    pub animation_amplitude: f64,
+    /// Number of animation repeats (0 = infinite loop until state changes).
+    #[serde(default = "default_animation_repeat")]
+    pub animation_repeat: u32,
 }
 
 impl Default for EdgePulseConfig {
@@ -545,6 +560,11 @@ impl Default for EdgePulseConfig {
             right_gradient_start: default_right_start(),
             right_gradient_end: default_right_end(),
             alpha: default_edge_pulse_alpha(),
+            animation_enabled: false,
+            animation_style: default_animation_style(),
+            animation_duration: default_animation_duration(),
+            animation_amplitude: default_animation_amplitude(),
+            animation_repeat: default_animation_repeat(),
         }
     }
 }
@@ -559,6 +579,22 @@ fn default_edge_pulse_height_ratio() -> f64 {
 
 fn default_edge_pulse_alpha() -> f64 {
     0.85
+}
+
+fn default_animation_style() -> String {
+    "pulse".to_string()
+}
+
+fn default_animation_duration() -> f64 {
+    600.0
+}
+
+fn default_animation_amplitude() -> f64 {
+    0.8
+}
+
+fn default_animation_repeat() -> u32 {
+    3
 }
 
 fn default_left_start() -> String {

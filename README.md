@@ -282,7 +282,7 @@ open_on_workspace = "browser"
 
 ![Workspace Rule - Auto Tile](./assets/auto_tile.mp4)
 
-工作区窗口布局管理插件，提供自动宽度调整、自动平铺、自动对齐和自动最大化等功能。整合了原 Autofill 插件的功能，提供更全面的工作区窗口管理能力。内置 EdgePulse 边缘提示，在聚焦列到达工作区边缘时渲染视觉提示。
+工作区窗口布局管理插件，提供自动宽度调整、自动平铺、自动对齐和自动最大化等功能。整合了原 Autofill 插件的功能，提供更全面的工作区窗口管理能力。内置 EdgePulse 边缘提示（支持动画效果），在聚焦列到达工作区边缘时渲染视觉提示。
 
 **配置示例**：
 ```toml
@@ -294,6 +294,15 @@ workspace_rule = true
 auto_width = ["100%", "50%", "33.33%", "25%", "20%"]
 auto_fill = true  # 自动对齐（原 Autofill 功能）
 auto_maximize = true  # 自动最大化
+
+# EdgePulse 边缘提示（支持动画）
+[piri.workspace_rule.edge_pulse]
+enabled = true
+animation_enabled = true  # 启用动画
+animation_style = "pulse"  # pulse 呼吸效果，fade 淡入效果
+animation_duration = 600  # 动画周期（毫秒）
+animation_amplitude = 0.8  # 动画强度
+animation_repeat = 3  # 每次触发播放次数（0=无限）
 
 # 工作区特定配置
 [workspace_rule.main]

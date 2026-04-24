@@ -24,6 +24,11 @@ left_gradient_end = "#1f4fff"
 right_gradient_start = "#ffd36a"
 right_gradient_end = "#ff7a1f"
 alpha = 0.85
+animation_enabled = false
+animation_style = "pulse"
+animation_duration = 600
+animation_amplitude = 0.8
+animation_repeat = 3
 ```
 
 ### 工作区级别配置
@@ -56,6 +61,20 @@ alpha = 0.9
 | `right_gradient_start` | `String` | `#ffd36a` | 右侧提示渐变起始色 |
 | `right_gradient_end` | `String` | `#ff7a1f` | 右侧提示渐变结束色 |
 | `alpha` | `f64` | `0.85` | 全局透明度（0.0-1.0） |
+| `animation_enabled` | `bool` | `false` | 是否启用动效（pulse/fade） |
+| `animation_style` | `String` | `"pulse"` | 动效类型：`"pulse"` 呼吸，`"fade"` 淡入 |
+| `animation_duration` | `f64` | `600.0` | 单次动效周期（毫秒） |
+| `animation_amplitude` | `f64` | `0.8` | 动效强度 0.0-1.0，影响透明度变化范围 |
+| `animation_repeat` | `u32` | `3` | 每次触发播放次数（0=无限循环直到状态变化） |
+
+## 动效工作原理
+
+启用 `animation_enabled = true` 后，当聚焦列到达边缘时，指示器将以动画形式呈现：
+
+- **pulse（脉冲）**：透明度呈正弦波呼吸，柔和提醒，最不显眼
+- **fade（淡入）**：仅淡入一次后保持常亮，不烦人
+
+动画以 ~60 FPS 帧率渲染，通过 `timerfd` + `poll` 机制驱动，空闲时 CPU 占用 0%。每次触发默认播放 3 次（`animation_repeat = 3`），然后保持静态常亮。
 
 ## 工作原理
 

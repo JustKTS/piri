@@ -274,7 +274,9 @@ For detailed documentation, please refer to the [Window Rule documentation](docs
 
 ![Workspace Rule](./assets/autofill.mp4)
 
-Workspace window layout management plugin that provides automatic width adjustment, automatic tiling, automatic alignment, and automatic maximization. Integrates the original Autofill plugin functionality with built-in EdgePulse edge indicators that render visual hints when the focused column reaches the workspace edge.
+![Workspace Rule - Auto Tile](./assets/auto_tile.mp4)
+
+Workspace window layout management plugin that provides automatic width adjustment, automatic tiling, automatic alignment, and automatic maximization. Integrates the original Autofill plugin functionality with built-in EdgePulse edge indicators (supports animation effects) that render visual hints when the focused column reaches the workspace edge.
 
 **Configuration Example**:
 ```toml
@@ -286,6 +288,15 @@ workspace_rule = true
 auto_width = ["100%", "50%", "33.33%", "25%", "20%"]
 auto_fill = true  # Automatic alignment (original Autofill functionality)
 auto_maximize = true  # Automatic maximization
+
+# EdgePulse edge indicator (with animation support)
+[piri.workspace_rule.edge_pulse]
+enabled = true
+animation_enabled = true  # Enable animation
+animation_style = "pulse"  # "pulse" for breathing, "fade" for fade-in
+animation_duration = 600  # Animation cycle duration (milliseconds)
+animation_amplitude = 0.8  # Animation intensity
+animation_repeat = 3  # Repeat count per trigger (0 = infinite)
 
 # Workspace-specific configuration
 [workspace_rule.main]

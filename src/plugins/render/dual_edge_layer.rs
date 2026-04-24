@@ -30,6 +30,10 @@ pub struct DualEdgeRenderRequest {
     pub right_style: EdgeGradientStyle,
     pub target_output: Option<String>,
     pub output_height: i32,
+    // Animation fields
+    pub animation_t: f64,
+    pub animation_style: String,
+    pub animation_amplitude: f64,
 }
 
 pub struct DualEdgeLayerRenderer {
@@ -68,7 +72,10 @@ impl DualEdgeLayerRenderer {
             right_start: request.right_style.start,
             right_end: request.right_style.end,
             base_alpha: request.left_style.base_alpha,
-            target_output: request.target_output,
+            target_output: request.target_output.clone(),
+            animation_t: request.animation_t,
+            animation_style: request.animation_style.clone(),
+            animation_amplitude: request.animation_amplitude,
         };
 
         self.inner.render(native_req).context("Failed to send native render command")
@@ -103,6 +110,9 @@ impl DualEdgeLayerRenderer {
                 },
                 base_alpha: 0.0,
                 target_output: None,
+                animation_t: -1.0,
+                animation_style: String::new(),
+                animation_amplitude: 0.0,
             };
             let _ = self.inner.render(native_req);
         }

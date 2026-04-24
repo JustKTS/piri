@@ -28,6 +28,10 @@ pub struct NativeRenderRequest {
     pub right_end: RgbColor,
     pub base_alpha: f64,
     pub target_output: Option<String>,
+    // Animation fields
+    pub animation_t: f64,         // Animation progress 0.0-1.0, 0 = no animation
+    pub animation_style: String,  // "pulse" | "fade"
+    pub animation_amplitude: f64, // 0.0-1.0
 }
 
 struct EdgeSurface {
@@ -57,6 +61,14 @@ struct AppState {
     right: Option<EdgeSurface>,
     pending_left: Option<NativeRenderRequest>,
     pending_right: Option<NativeRenderRequest>,
+    // Animation state
+    animation_active: bool,
+    animation_timerfd: Option<OwnedFd>,
+    animation_start: Option<std::time::Instant>,
+    animation_duration_ms: f64,
+    animation_repeat_count: u32,
+    animation_repeat_max: u32,
+    animation_request: Option<NativeRenderRequest>,
 }
 
 impl Default for NativeSurfaceRenderer {
@@ -189,6 +201,72 @@ impl Drop for NativeSurfaceRenderer {
     }
 }
 
+/// Create a timerfd for animation frame timing.
+fn create_timerfd() -> Result<OwnedFd> {
+    let fd = unsafe { libc::timerfd_create(libc::CLOCK_MONOTONIC, libc::TFD_CLOEXEC) };
+    if fd < 0 {
+        anyhow::bail!("timerfd_create failed: {}", std::io::Error::last_os_error());
+    }
+    Ok(unsafe { OwnedFd::from_raw_fd(fd) })
+}
+
+/// Set timerfd to fire periodically.
+/// `interval_ms` = interval between firings (milliseconds).
+/// `initial_ms` = first firing delay (milliseconds, defaults to interval if 0).
+fn set_timerfd(timerfd: &OwnedFd, interval_ms: f64, initial_ms: f64) {
+    let interval_sec = (interval_ms / 1000.0) as i64;
+    let interval_nsec = ((interval_ms % 1000.0) * 1_000_000.0) as i64;
+    let initial_sec = if initial_ms > 0.0 {
+        (initial_ms / 1000.0) as i64
+    } else {
+        interval_sec
+    };
+    let initial_nsec = if initial_ms > 0.0 {
+        ((initial_ms % 1000.0) * 1_000_000.0) as i64
+    } else {
+        interval_nsec
+    };
+
+    let spec = libc::itimerspec {
+        it_interval: libc::timespec {
+            tv_sec: interval_sec,
+            tv_nsec: interval_nsec,
+        },
+        it_value: libc::timespec {
+            tv_sec: initial_sec,
+            tv_nsec: initial_nsec,
+        },
+    };
+    unsafe {
+        libc::timerfd_settime(timerfd.as_raw_fd(), 0, &spec, std::ptr::null_mut());
+    }
+}
+
+/// Clear timerfd by reading the counter.
+fn clear_timerfd(timerfd: &OwnedFd) {
+    let mut buf = [0u8; 8];
+    unsafe {
+        libc::read(timerfd.as_raw_fd(), buf.as_mut_ptr() as *mut _, 8);
+    }
+}
+
+/// Disable timerfd (stop firing).
+fn disable_timerfd(timerfd: &OwnedFd) {
+    let spec = libc::itimerspec {
+        it_interval: libc::timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        },
+        it_value: libc::timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        },
+    };
+    unsafe {
+        libc::timerfd_settime(timerfd.as_raw_fd(), 0, &spec, std::ptr::null_mut());
+    }
+}
+
 fn init_wayland() -> Result<(Connection, wayland_client::EventQueue<AppState>, AppState)> {
     let conn = Connection::connect_to_env().context("Failed to connect to Wayland display")?;
 
@@ -220,6 +298,13 @@ fn init_wayland() -> Result<(Connection, wayland_client::EventQueue<AppState>, A
         right: None,
         pending_left: None,
         pending_right: None,
+        animation_active: false,
+        animation_timerfd: None,
+        animation_start: None,
+        animation_duration_ms: 600.0,
+        animation_repeat_count: 0,
+        animation_repeat_max: 3,
+        animation_request: None,
     };
 
     // Discover globals and collect output names
@@ -284,22 +369,38 @@ fn event_loop(
         // Dispatch any pending Wayland events
         let dispatched = event_queue.dispatch_pending(&mut state)?;
 
-        // If no pending events, block until Wayland or eventfd is ready
-        if dispatched == 0 {
-            let mut fds = [
-                libc::pollfd {
-                    fd: wl_fd,
-                    events: libc::POLLIN,
-                    revents: 0,
-                },
-                libc::pollfd {
-                    fd: event_fd,
-                    events: libc::POLLIN,
-                    revents: 0,
-                },
-            ];
+        // Build poll fds: wayland + eventfd + optionally timerfd
+        let mut fds_vec = vec![
+            libc::pollfd {
+                fd: wl_fd,
+                events: libc::POLLIN,
+                revents: 0,
+            },
+            libc::pollfd {
+                fd: event_fd,
+                events: libc::POLLIN,
+                revents: 0,
+            },
+        ];
 
-            let ret = unsafe { libc::poll(fds.as_mut_ptr(), 2, -1) };
+        let timerfd_idx = if state.animation_active {
+            if let Some(ref tfd) = state.animation_timerfd {
+                fds_vec.push(libc::pollfd {
+                    fd: tfd.as_raw_fd(),
+                    events: libc::POLLIN,
+                    revents: 0,
+                });
+                Some(2)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        // If no pending events, block until an fd is ready
+        if dispatched == 0 {
+            let ret = unsafe { libc::poll(fds_vec.as_mut_ptr(), fds_vec.len() as u64, -1) };
             if ret < 0 {
                 let err = std::io::Error::last_os_error();
                 if err.kind() == std::io::ErrorKind::Interrupted {
@@ -308,8 +409,17 @@ fn event_loop(
                 return Err(err.into());
             }
 
+            // timerfd triggered: animation frame tick
+            if let Some(idx) = timerfd_idx {
+                if fds_vec[idx as usize].revents & libc::POLLIN != 0 {
+                    clear_timerfd(state.animation_timerfd.as_ref().unwrap());
+                    handle_animation_frame(&mut state, &compositor, &shm, &qh)?;
+                    continue;
+                }
+            }
+
             // eventfd triggered: clear it and continue to drain render requests
-            if fds[1].revents & libc::POLLIN != 0 {
+            if fds_vec[1].revents & libc::POLLIN != 0 {
                 let mut buf = [0u8; 8];
                 unsafe {
                     libc::read(event_fd, buf.as_mut_ptr() as *mut _, 8);
@@ -318,16 +428,76 @@ fn event_loop(
             }
 
             // Wayland fd ready: read from socket
-            if fds[0].revents & libc::POLLIN != 0 {
+            if fds_vec[0].revents & libc::POLLIN != 0 {
                 if let Some(guard) = conn.prepare_read() {
                     if guard.read().is_err() {
-                        // Should not happen if poll said readable, but handle it
                         continue;
                     }
                 }
             }
         }
     }
+}
+
+/// Handle a timerfd tick: advance animation and re-render.
+fn handle_animation_frame(
+    state: &mut AppState,
+    compositor: &wl_compositor::WlCompositor,
+    shm: &wl_shm::WlShm,
+    qh: &QueueHandle<AppState>,
+) -> Result<()> {
+    let Some(req) = state.animation_request.clone() else {
+        return Ok(());
+    };
+
+    let elapsed = state.animation_start.map(|t| t.elapsed().as_millis() as f64).unwrap_or(0.0);
+
+    let t = (elapsed / state.animation_duration_ms).clamp(0.0, 1.0);
+
+    // Re-render with current animation progress
+    let mut animated_req = req.clone();
+    animated_req.animation_t = t;
+
+    // Render left side
+    if animated_req.show_left {
+        if let Some(ref edge) = state.left {
+            if edge.configured {
+                render_to_surface(state, shm, qh, &animated_req, true)?;
+            }
+        }
+    }
+
+    // Render right side
+    if animated_req.show_right {
+        if let Some(ref edge) = state.right {
+            if edge.configured {
+                render_to_surface(state, shm, qh, &animated_req, false)?;
+            }
+        }
+    }
+
+    // Check if animation cycle completed
+    if t >= 1.0 {
+        state.animation_repeat_count += 1;
+        if state.animation_repeat_max > 0
+            && state.animation_repeat_count >= state.animation_repeat_max
+        {
+            // Stop animation, keep final state (static indicator)
+            if let Some(ref tfd) = state.animation_timerfd {
+                disable_timerfd(tfd);
+            }
+            state.animation_active = false;
+            state.animation_start = None;
+        } else {
+            // Reset for next cycle
+            state.animation_start = Some(std::time::Instant::now());
+            if let Some(ref tfd) = state.animation_timerfd {
+                set_timerfd(tfd, 16.667, 16.667); // ~60 FPS
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn apply_request(
@@ -341,14 +511,44 @@ fn apply_request(
     let w = req.width.max(1);
     let h = req.height.max(1);
 
+    // Start animation if requested and not already active
+    if req.animation_t >= 0.0 && !state.animation_active {
+        // Create timerfd if needed
+        if state.animation_timerfd.is_none() {
+            match create_timerfd() {
+                Ok(tfd) => state.animation_timerfd = Some(tfd),
+                Err(e) => log::error!("Failed to create animation timerfd: {}", e),
+            }
+        }
+
+        if let Some(ref tfd) = state.animation_timerfd {
+            state.animation_active = true;
+            state.animation_start = Some(std::time::Instant::now());
+            state.animation_request = Some(req.clone());
+            state.animation_repeat_count = 0;
+            // Set timer to fire at ~60 FPS
+            set_timerfd(tfd, 16.667, 16.667);
+        }
+    } else if req.animation_t < 0.0 {
+        // Animation disabled for this request, stop any active animation
+        if state.animation_active {
+            if let Some(ref tfd) = state.animation_timerfd {
+                disable_timerfd(tfd);
+            }
+            state.animation_active = false;
+            state.animation_start = None;
+        }
+    }
+
     debug!(
-        "apply_request: left={}, right={}, {}x{}, output={:?}, known_outputs={}",
+        "apply_request: left={}, right={}, {}x{}, output={:?}, known_outputs={}, animation_t={}",
         req.show_left,
         req.show_right,
         w,
         h,
         req.target_output,
-        state.outputs.keys().len()
+        state.outputs.keys().len(),
+        req.animation_t
     );
 
     // Left edge
@@ -526,6 +726,9 @@ fn render_to_surface(
                 req.left_end,
                 req.base_alpha,
                 true,
+                req.animation_t,
+                &req.animation_style,
+                req.animation_amplitude,
             );
         } else {
             render_gradient(
@@ -536,6 +739,9 @@ fn render_to_surface(
                 req.right_end,
                 req.base_alpha,
                 false,
+                req.animation_t,
+                &req.animation_style,
+                req.animation_amplitude,
             );
         }
         write_buffer(edge._fd.as_ref().unwrap(), &buf);
@@ -556,9 +762,35 @@ fn render_gradient(
     end: RgbColor,
     base_alpha: f64,
     is_left: bool,
+    t: f64,
+    style: &str,
+    amplitude: f64,
 ) {
     // Clear all pixels to transparent
     pixels.fill(0);
+
+    // Apply animation modulation to base_alpha
+    let anim_alpha = if t > 0.0 {
+        match style {
+            "pulse" => {
+                // Pulse: alpha oscillates around base_alpha using sine wave
+                let modulation = (t * 2.0 * std::f64::consts::PI).sin();
+                (base_alpha * (1.0 - amplitude * 0.5 + amplitude * 0.5 * modulation))
+                    .clamp(0.0, 1.0)
+            }
+            "fade" => {
+                // Fade: fade in during first 1/3 of animation, then stay at base_alpha
+                if t < 1.0 / 3.0 {
+                    base_alpha * (t * 3.0).min(1.0)
+                } else {
+                    base_alpha
+                }
+            }
+            _ => base_alpha,
+        }
+    } else {
+        base_alpha
+    };
 
     let mut surface = cairo::ImageSurface::create(cairo::Format::ARgb32, width, height)
         .expect("Failed to create cairo surface");
@@ -588,8 +820,8 @@ fn render_gradient(
                 .build(&color_stops);
 
         // Horizontal alpha: edge → center, guaranteed 0 at width boundary
-        let core_max = base_alpha * 0.72;
-        let core_mid = base_alpha * 0.28;
+        let core_max = anim_alpha * 0.72;
+        let core_mid = anim_alpha * 0.28;
 
         let h_stops = if is_left {
             GradientStops::new()

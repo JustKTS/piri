@@ -24,6 +24,11 @@ left_gradient_end = "#1f4fff"
 right_gradient_start = "#ffd36a"
 right_gradient_end = "#ff7a1f"
 alpha = 0.85
+animation_enabled = false
+animation_style = "pulse"
+animation_duration = 600
+animation_amplitude = 0.8
+animation_repeat = 3
 ```
 
 ### Workspace-Specific Configuration
@@ -56,6 +61,20 @@ alpha = 0.9
 | `right_gradient_start` | `String` | `#ffd36a` | Right hint gradient start color |
 | `right_gradient_end` | `String` | `#ff7a1f` | Right hint gradient end color |
 | `alpha` | `f64` | `0.85` | Global alpha (0.0-1.0) |
+| `animation_enabled` | `bool` | `false` | Enable animation effects (pulse/fade) |
+| `animation_style` | `String` | `"pulse"` | Animation type: `"pulse"` for breathing, `"fade"` for fade-in |
+| `animation_duration` | `f64` | `600.0` | Single animation cycle duration in milliseconds |
+| `animation_amplitude` | `f64` | `0.8` | Animation intensity 0.0-1.0, controls alpha variation range |
+| `animation_repeat` | `u32` | `3` | Number of animation repeats per trigger (0 = infinite until state change) |
+
+## Animation How It Works
+
+When `animation_enabled = true` is set, the indicator animates when the focused column reaches the edge:
+
+- **pulse**: Alpha oscillates using a sine wave for a gentle breathing effect that's least intrusive
+- **fade**: Fades in once and stays at full alpha, not annoying
+
+Animation renders at ~60 FPS, driven by `timerfd` + `poll` mechanism. CPU usage is 0% when idle. By default, it plays 3 times per trigger (`animation_repeat = 3`), then stays static.
 
 ## How It Works
 

@@ -36,6 +36,11 @@ impl EdgePulseRenderer {
         target_output: Option<&str>,
         output_height: i32,
     ) -> Result<()> {
+        let animation_t = if config.animation_enabled {
+            0.001 // > 0.0 triggers animation start in native_surface
+        } else {
+            -1.0 // disables animation
+        };
         self.inner.render(DualEdgeRenderRequest {
             visibility: EdgeVisibility {
                 left: state.show_left,
@@ -57,6 +62,9 @@ impl EdgePulseRenderer {
             },
             target_output: target_output.map(|s| s.to_string()),
             output_height,
+            animation_t,
+            animation_style: config.animation_style.clone(),
+            animation_amplitude: config.animation_amplitude,
         })
     }
 
