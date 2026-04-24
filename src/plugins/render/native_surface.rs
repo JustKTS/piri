@@ -1,7 +1,6 @@
 use std::os::unix::io::{AsFd, AsRawFd, FromRawFd, OwnedFd};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
-use std::time::Duration;
 
 use anyhow::{Context, Result};
 use log::debug;
@@ -45,6 +44,7 @@ struct EdgeSurface {
 
 pub struct NativeSurfaceRenderer {
     tx: Option<mpsc::Sender<NativeRenderRequest>>,
+    notify_fd: Option<OwnedFd>,
     thread_error: Arc<Mutex<Option<String>>>,
 }
 
@@ -69,6 +69,7 @@ impl NativeSurfaceRenderer {
     pub fn new() -> Self {
         Self {
             tx: None,
+            notify_fd: None,
             thread_error: Arc::new(Mutex::new(None)),
         }
     }
@@ -85,11 +86,25 @@ impl NativeSurfaceRenderer {
         let tx = self.tx.as_ref().context("Native renderer channel unavailable")?;
         tx.send(request)
             .map_err(|_| anyhow::anyhow!("Native Wayland renderer thread exited unexpectedly"))?;
+
+        // Wake up the event loop via eventfd
+        if let Some(fd) = self.notify_fd.as_ref() {
+            let buf: [u8; 8] = 1u64.to_ne_bytes();
+            unsafe {
+                libc::write(fd.as_raw_fd(), buf.as_ptr() as *const _, 8);
+            }
+        }
         Ok(())
     }
 
     pub fn shutdown(&mut self) {
         self.tx = None;
+        if let Some(fd) = self.notify_fd.take() {
+            let buf: [u8; 8] = 1u64.to_ne_bytes();
+            unsafe {
+                libc::write(fd.as_raw_fd(), buf.as_ptr() as *const _, 8);
+            }
+        }
     }
 
     fn ensure_started(&mut self) {
@@ -105,7 +120,27 @@ impl NativeSurfaceRenderer {
 
         *self.thread_error.lock().unwrap() = None;
         let error_sink = Arc::clone(&self.thread_error);
+
+        // Create eventfd for waking up the event loop
+        let eventfd = unsafe { libc::eventfd(0, libc::EFD_CLOEXEC) };
+        if eventfd < 0 {
+            log::error!(
+                "Failed to create eventfd: {}",
+                std::io::Error::last_os_error()
+            );
+            return;
+        }
+        let read_fd = unsafe { libc::dup(eventfd) };
+        if read_fd < 0 {
+            unsafe { libc::close(eventfd) };
+            log::error!("Failed to dup eventfd: {}", std::io::Error::last_os_error());
+            return;
+        }
+
         let (tx, rx) = mpsc::channel::<NativeRenderRequest>();
+        let notify_fd = unsafe { OwnedFd::from_raw_fd(eventfd) };
+        let eventfd_read = unsafe { OwnedFd::from_raw_fd(read_fd) };
+        self.notify_fd = Some(notify_fd);
 
         // Use a channel to wait for initialization to complete
         let (init_tx, init_rx) = mpsc::channel::<Result<()>>();
@@ -115,8 +150,8 @@ impl NativeSurfaceRenderer {
                     // Signal successful initialization
                     let _ = init_tx.send(Ok(()));
                     debug!("Native Wayland renderer started");
-                    // Run the event loop
-                    if let Err(e) = event_loop(&conn, &mut event_queue, state, rx) {
+                    // Run the event loop with eventfd read end
+                    if let Err(e) = event_loop(&conn, &mut event_queue, state, rx, eventfd_read) {
                         let msg = format!("{:#}", e);
                         log::error!("Native Wayland renderer error: {}", msg);
                         *error_sink.lock().unwrap() = Some(msg);
@@ -138,9 +173,11 @@ impl NativeSurfaceRenderer {
             }
             Ok(Err(e)) => {
                 log::error!("Native renderer init failed: {:#}", e);
+                self.notify_fd = None;
             }
             Err(_) => {
                 log::error!("Native renderer thread died during init");
+                self.notify_fd = None;
             }
         }
     }
@@ -208,6 +245,7 @@ fn event_loop(
     event_queue: &mut wayland_client::EventQueue<AppState>,
     mut state: AppState,
     rx: mpsc::Receiver<NativeRenderRequest>,
+    notify_fd: OwnedFd,
 ) -> Result<()> {
     let qh = event_queue.handle();
 
@@ -215,6 +253,9 @@ fn event_loop(
     let compositor = state.compositor.as_ref().unwrap().clone();
     let shm = state.shm.as_ref().unwrap().clone();
     let layer_shell = state.layer_shell.as_ref().unwrap().clone();
+
+    let wl_fd = conn.as_fd().as_raw_fd();
+    let event_fd = notify_fd.as_raw_fd();
 
     debug!("Entering native Wayland event loop");
 
@@ -241,20 +282,48 @@ fn event_loop(
         }
 
         // Dispatch any pending Wayland events
-        if event_queue.dispatch_pending(&mut state)? == 0 {
-            match conn.prepare_read() {
-                Some(guard) => {
-                    // Socket is non-blocking: read() returns immediately.
-                    // EAGAIN means no data available yet — sleep briefly
-                    // so we can check the mpsc channel again on next iteration.
-                    if guard.read().is_err() {
-                        thread::sleep(Duration::from_millis(4));
-                    }
-                    // read() Ok: events were read into the internal buffer;
-                    // dispatch them on the next loop iteration.
+        let dispatched = event_queue.dispatch_pending(&mut state)?;
+
+        // If no pending events, block until Wayland or eventfd is ready
+        if dispatched == 0 {
+            let mut fds = [
+                libc::pollfd {
+                    fd: wl_fd,
+                    events: libc::POLLIN,
+                    revents: 0,
+                },
+                libc::pollfd {
+                    fd: event_fd,
+                    events: libc::POLLIN,
+                    revents: 0,
+                },
+            ];
+
+            let ret = unsafe { libc::poll(fds.as_mut_ptr(), 2, -1) };
+            if ret < 0 {
+                let err = std::io::Error::last_os_error();
+                if err.kind() == std::io::ErrorKind::Interrupted {
+                    continue;
                 }
-                None => {
-                    // Internal events already queued — dispatch them next iteration.
+                return Err(err.into());
+            }
+
+            // eventfd triggered: clear it and continue to drain render requests
+            if fds[1].revents & libc::POLLIN != 0 {
+                let mut buf = [0u8; 8];
+                unsafe {
+                    libc::read(event_fd, buf.as_mut_ptr() as *mut _, 8);
+                }
+                continue;
+            }
+
+            // Wayland fd ready: read from socket
+            if fds[0].revents & libc::POLLIN != 0 {
+                if let Some(guard) = conn.prepare_read() {
+                    if guard.read().is_err() {
+                        // Should not happen if poll said readable, but handle it
+                        continue;
+                    }
                 }
             }
         }
