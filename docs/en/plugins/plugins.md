@@ -6,7 +6,7 @@ Piri supports a plugin system that allows you to extend functionality. Plugins r
 
 ### [Scratchpads](scratchpads.md)
 
-A powerful window management feature that allows you to quickly show and hide windows of frequently used applications. Supports cross-workspace and cross-monitor functionality.
+Quick show/hide windows, cross-workspace/monitor support.
 
 **Key Features**:
 - Quick show/hide of frequently used applications
@@ -15,16 +15,61 @@ A powerful window management feature that allows you to quickly show and hide wi
 
 ### [Empty Plugin](empty.md)
 
-Executes commands when switching to specific empty workspaces. Useful for automating workflows, such as automatically launching applications in empty workspaces.
+Empty workspace automation, auto-executes commands on switch.
 
 **Key Features**:
 - Automatic command execution on empty workspaces
 - Workspace-based configuration
 - Similar to Hyprland's `on-created-empty` workspace rule
 
+### [Singleton Plugin](singleton.md)
+
+Manages single-instance windows for global uniqueness.
+
+**Key Features**:
+- Smart detection with auto App ID extraction
+- Window registry for fast lookup
+- Supports post-creation commands (`on_created_command`)
+
+### [Window Rule Plugin](window_rule.md)
+
+Regex-based window placement to specified workspaces, with focus-triggered commands.
+
+**Key Features**:
+- Regex matching (`app_id`/`title`, lists supported, OR logic)
+- Workspace name/index matching
+- Focus-triggered commands with de-duplication
+
+### [Workspace Rule Plugin](workspace_rule.md)
+
+Workspace layout management: auto-width, tiling, alignment, maximization. Built-in EdgePulse indicators.
+
+**Key Features**:
+- Auto-width, tiling, alignment, maximization
+- EdgePulse edge indicators with animation
+- Workspace-aware, independent configuration
+
+### [Window Order Plugin](window_order.md)
+
+Weight-based window reordering. Larger weight = further left.
+
+**Key Features**:
+- Intelligent sorting, minimizes moves
+- Manual/event-driven trigger support
+- Supports `app_id` partial matching
+
+### [Swallow Plugin](swallow.md)
+
+Window swallowing, child replaces parent in layout.
+
+**Key Features**:
+- PID-based parent-child matching (default)
+- Rule-based matching (`app_id`/`title`/`pid`)
+- Intelligent focus window queue
+
 ### [Mark Plugin](mark.md)
 
-Named marks for windows via `piri mark …`: bind the focused window or jump back to a marked window. Bindings are kept in daemon memory only; no per-mark tables in the config.
+Named marks for windows via `piri mark …`: bind/focus windows. Bindings in daemon memory only.
 
 **Key features**:
 - `toggle`, `add`, and `delete` operations
@@ -32,31 +77,12 @@ Named marks for windows via `piri mark …`: bind the focused window or jump bac
 
 ### [Sticky Plugin](sticky.md)
 
-Pins one floating window as a follower and moves it when the focused workspace changes. Great for always-available utility windows.
+Pin floating window to follow focused workspace. Ideal for utility windows.
 
 **Key features**:
 - `add` and `delete` commands
 - `--cross` controls cross-monitor behavior
 - Floating windows only
-
-### [Window Rule Plugin](window_rule.md)
-
-Automatically moves windows to specified workspaces based on their `app_id` or `title`. Useful for automating window management and organizing applications.
-
-**Key Features**:
-- Automatic window assignment to workspaces
-- Match by `app_id` or `title` (with regex support)
-- Similar to Hyprland's window rules
-
-### [Autofill Plugin](autofill.md)
-
-Automatically aligns the last column of windows to the rightmost position when windows are closed or layout changes. Helps maintain a clean and organized window layout.
-
-**Key Features**:
-- Pure event-driven, real-time alignment
-- Zero configuration required
-- Focus preservation - maintains user's focused window
-- Workspace-aware operation
 
 ## Plugin Control
 

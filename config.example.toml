@@ -12,7 +12,6 @@
 scratchpads = true
 empty = true
 window_rule = true
-autofill = true
 singleton = true
 window_order = true
 swallow = true

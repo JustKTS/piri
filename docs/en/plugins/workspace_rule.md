@@ -1,6 +1,6 @@
 # Workspace Rule Plugin
 
-The Workspace Rule plugin provides automated window layout management for workspaces, including automatic width adjustment, automatic tiling, automatic alignment, and automatic maximization. This plugin integrates the original Autofill functionality, providing comprehensive workspace window management capabilities.
+The Workspace Rule plugin provides automated window layout management for workspaces, including automatic width adjustment, automatic tiling, automatic alignment, and automatic maximization.
 
 ## Features
 
@@ -8,19 +8,19 @@ The Workspace Rule plugin provides the following features:
 
 - **Automatic Width Adjustment** (`auto_width`): Automatically adjust window widths based on window count
 - **Automatic Tiling** (`auto_tile`): Automatically merge new windows into existing columns (except first column)
-- **Automatic Alignment** (`auto_fill`): Automatically align the last column of windows to the rightmost position (original Autofill functionality)
+- **Automatic Alignment** (`auto_fill`): Automatically align the last column of windows to the rightmost position
 - **Automatic Maximization** (`auto_maximize`): Automatically maximize when there's only one window, and unmaximize when there are multiple windows
 - **EdgePulse Edge Indicator** (`edge_pulse`): Trigger left/right edge hints when the focused column reaches the workspace edge
 
 ## Demo Videos
 
-![Autofill Demo Video](../assets/autofill.mp4)
+![autofill 1](../assets/autofill.mp4)
 
-![Autofill Demo Video 1](../assets/autofill_1.mp4)
+![autofill 2](../assets/autofill_1.mp4)
 
-![Autofill Demo Video 2](../assets/autofill_2.mp4)
+![autofill 3](../assets/autofill_2.mp4)
 
-![Auto Tile Demo Video](../assets/auto_tile.mp4)
+![Auto Tile](../assets/auto_tile.mp4)
 
 ## Configuration
 
@@ -68,7 +68,7 @@ auto_width = ["100%", ["45%", "55%"], "33.33%"]
 [workspace_rule.main]
 auto_maximize = true
 
-# Enable automatic alignment (original Autofill functionality)
+# Enable automatic alignment
 [workspace_rule.dev]
 auto_fill = true
 ```
@@ -79,7 +79,7 @@ auto_fill = true
 | :--- | :--- | :--- |
 | `auto_width` | `Vec<Vec<String>>` | Auto width configuration array, index corresponds to window count (1-based). Each element can be a string (all windows same width) or array (different widths per window). Width values must be in percentage format (e.g., `"50%"`) |
 | `auto_tile` | `bool` | If `true`, automatically merge new windows into existing columns (except first column). When a non-first column has only one window, new windows will be merged into that column |
-| `auto_fill` | `bool` | If `true`, automatically align the last column of windows to the rightmost position (original Autofill functionality) |
+| `auto_fill` | `bool` | If `true`, automatically align the last column of windows to the rightmost position |
 | `auto_maximize` | `bool` | If `true`, automatically maximize to edges when workspace has only one window, and unmaximize when there are multiple windows |
 | `edge_pulse.enabled` | `bool` | Enable EdgePulse workspace-edge detection and hints |
 | `edge_pulse.show_left` | `bool` | Show left hint when reaching the workspace left edge |
@@ -120,13 +120,26 @@ When a new window opens:
 
 ### Automatic Alignment (`auto_fill`)
 
-When windows are closed or layout changes:
+**Functionality**: Automatically align the last column to the rightmost position when windows are closed or layout changes, eliminating gaps.
 
-1. Save the currently focused window
-2. Focus the first column, then focus the last column (aligning all columns to the rightmost position)
-3. Restore the previously focused window
+**Triggers**:
+- Window closed (`WindowClosed` event)
+- Layout changed (`WindowLayoutsChanged` event)
 
-This is the functionality of the original Autofill plugin, now integrated into the Workspace Rule plugin.
+**Implementation**:
+1. Save currently focused window
+2. Focus first column (`focus-window` to first column)
+3. Focus last column (aligns all columns to right)
+4. Restore original focus
+
+**Configuration Examples**:
+```toml
+[piri.workspace_rule]
+auto_fill = true  # Enable globally
+
+[workspace_rule.main]
+auto_fill = true  # Enable only for main workspace
+```
 
 ### Automatic Maximization (`auto_maximize`)
 
@@ -188,7 +201,7 @@ auto_width = ["100%", ["45%", "55%"], ["30%", "35%", "35%"]]
 auto_maximize = true
 ```
 
-### Example 4: Enable Automatic Alignment (Original Autofill)
+### Example 4: Enable Automatic Alignment
 
 ```toml
 [workspace_rule.browser]
@@ -220,30 +233,6 @@ auto_width = ["100%", ["45%", "55%"], ["30%", "35%", "35%"]]
 auto_tile = true
 ```
 
-## Migration from Autofill
-
-If you previously used the Autofill plugin, you can migrate as follows:
-
-**Old Configuration**:
-```toml
-[piri.plugins]
-autofill = true
-```
-
-**New Configuration**:
-```toml
-[piri.plugins]
-workspace_rule = true
-
-# Globally enable automatic alignment (original Autofill functionality)
-[piri.workspace_rule]
-auto_fill = true
-
-# Or enable for specific workspace
-[workspace_rule.main]
-auto_fill = true
-```
-
 ## Features
 
 - ✅ **Workspace-Aware**: Each workspace can be configured independently
@@ -251,7 +240,7 @@ auto_fill = true
 - ✅ **Event-Driven**: Real-time response to window changes
 - ✅ **Throttling Optimization**: Avoids frequent triggers, improves performance
 - ✅ **State Tracking**: Intelligently tracks window state to avoid duplicate processing
-- ✅ **Integrated Functionality**: Integrates original Autofill plugin functionality
+- ✅ **Integrated Functionality**: Comprehensive workspace window management
 
 ## Use Cases
 
@@ -291,4 +280,3 @@ The plugin uses workspace name or ID to match windows:
 - Layouts with more than 5 columns will not apply width adjustment
 - Floating windows do not participate in width adjustment and automatic tiling
 - Automatic maximization only works for tiled windows
-
