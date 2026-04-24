@@ -504,10 +504,16 @@ impl WorkspaceRulePlugin {
 
         // 4. Get width configuration
         let auto_width = self.get_auto_width(ws_name);
-        let width_config = auto_width.get(column_count.saturating_sub(1)).context(format!(
-            "No width config for {} columns in workspace {}",
-            column_count, ws_name
-        ))?;
+        let width_config = if let Some(config) = auto_width.get(column_count.saturating_sub(1)) {
+            config
+        } else {
+            // No width config for this column count, nothing to do
+            debug!(
+                "No width config for {} columns in workspace {}, skipping",
+                column_count, ws_name
+            );
+            return Ok(());
+        };
 
         info!(
             "Applying width adjustment for {} columns ({} windows) in workspace {}: {:?}",
