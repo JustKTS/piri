@@ -127,7 +127,7 @@ piri completion fish > ~/.config/fish/completions/piri.fish
 
 ![Scratchpads](./assets/scratchpads.mp4)
 
-Quickly show and hide windows of frequently used applications. Supports cross-workspace and cross-monitor, so you can quickly access your scratchpad windows regardless of which workspace or monitor you're on. Features **dynamic window addition**, **automatic retention of manual size and margin adjustments**, **automatic moving to a specific workspace when hidden**, **swallowing window into the currently focused window** (`swallow_to_focus` option), **sticky behavior** (`sticky` option, delegated to sticky plugin), and **auto-hide on focus loss** (`auto_hide_on_focus_loss` option).
+Quickly show and hide windows of frequently used applications. Supports cross-workspace and cross-monitor, so you can quickly access your scratchpad windows regardless of which workspace or monitor you're on. Features **dynamic window addition**, **automatic retention of manual size and margin adjustments**, **automatic moving to a specific workspace when hidden**, **swallowing window into the currently focused window** (`swallow_to_focus` option), **sticky behavior** (`sticky` option, delegated to sticky plugin), **auto-hide on focus loss** (`auto_hide_on_focus_loss` option, only for floating windows), and **non-floating window direct focus** (when toggling, if window is not floating, directly focus without animation).
 
 **Configuration Example**:
 ```toml

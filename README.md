@@ -128,7 +128,7 @@ piri completion fish > ~/.config/fish/completions/piri.fish
 
 ![Scratchpads](./assets/scratchpads.mp4)
 
-快速显示和隐藏常用应用程序的窗口。支持跨 workspace 和 monitor，无论你在哪个工作区或显示器上，都能快速访问你的 scratchpad 窗口。支持**动态添加窗口**、**自动保留手动调整的大小与边距**、**隐藏后自动移动到指定工作区**、**将窗口吞入当前聚焦的窗口**（`swallow_to_focus` 选项）、**Sticky 行为**（`sticky` 选项，委托给 sticky 插件处理）以及**失去焦点自动隐藏**（`auto_hide_on_focus_loss` 选项）。
+快速显示和隐藏常用应用程序的窗口。支持跨 workspace 和 monitor，无论你在哪个工作区或显示器上，都能快速访问你的 scratchpad 窗口。支持**动态添加窗口**、**自动保留手动调整的大小与边距**、**隐藏后自动移动到指定工作区**、**将窗口吞入当前聚焦的窗口**（`swallow_to_focus` 选项）、**Sticky 行为**（`sticky` 选项，委托给 sticky 插件处理）、**失去焦点自动隐藏**（`auto_hide_on_focus_loss` 选项）以及**非浮动窗口直接聚焦**（`toggle` 时若窗口非浮动则直接 focus，不执行动画）。
 
 **配置示例**：
 ```toml

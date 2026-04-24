@@ -387,13 +387,26 @@ impl ScratchpadManager {
         // 2. Ensure window exists and is set up
         let window_id = self.ensure_window_id(name).await?;
 
+        // 3. Check if window is floating, if not, just focus it
+        if let Some(window) = self.niri.get_windows().await?.into_iter().find(|w| w.id == window_id)
+        {
+            if !window.floating {
+                debug!(
+                    "Scratchpad '{}' window {} is not floating, focusing directly",
+                    name, window_id
+                );
+                window_utils::focus_window(self.niri.clone(), window_id).await?;
+                return Ok(());
+            }
+        }
+
         // Collect all scratchpad window IDs before getting mutable borrow
         let scratchpad_window_ids: Vec<u64> =
             self.states.values().filter_map(|s| s.window_id).collect();
 
         let state = self.states.get_mut(name).unwrap();
 
-        // 3. Determine next state
+        // 4. Determine next state
         if state.is_visible {
             let (current_workspace, windows) =
                 window_utils::get_workspace_and_windows(&self.niri).await?;
@@ -430,7 +443,7 @@ impl ScratchpadManager {
             state.is_visible = true;
         }
 
-        // 4. Sync
+        // 5. Sync
         self.sync_state(name, move_to_workspace).await
     }
 
@@ -497,6 +510,9 @@ impl ScratchpadManager {
         window_id: u64,
         move_to_workspace: Option<String>,
     ) -> Result<()> {
+        // Get list of windows to check floating status
+        let windows = self.niri.get_windows().await?;
+
         let names_to_hide: Vec<String> = self
             .states
             .iter()
@@ -505,6 +521,14 @@ impl ScratchpadManager {
                     && state.is_visible
                     && state.window_id.is_some()
                     && state.window_id != Some(window_id)
+            })
+            .filter(|(_, state)| {
+                // Only auto-hide if the window is still floating
+                if let Some(wid) = state.window_id {
+                    windows.iter().any(|w| w.id == wid && w.floating)
+                } else {
+                    false
+                }
             })
             .map(|(name, _)| name.clone())
             .collect();
