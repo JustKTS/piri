@@ -153,24 +153,12 @@ impl WindowRulePlugin {
             {
                 // 1. Move to workspace if specified
                 if let Some(ref workspace_name) = rule.open_on_workspace {
-                    if let Some(matched_ws) =
-                        window_utils::match_workspace(workspace_name, self.niri.clone()).await?
-                    {
-                        // Check if already there
-                        let current_workspaces = self.niri.get_workspaces_for_mapping().await?;
-                        let is_already_there = current_workspaces.iter().any(|ws| {
-                            ws.id == window.workspace_id.unwrap_or(0)
-                                && (ws.name.as_ref() == Some(&matched_ws)
-                                    || ws.idx.to_string() == matched_ws)
-                        });
-
-                        if !is_already_there {
-                            info!("Moving window {} to workspace {}", window.id, matched_ws);
-                            self.niri.move_window_to_workspace(window.id, &matched_ws).await?;
-                            tokio::time::sleep(Duration::from_millis(100)).await;
-                            let _ = window_utils::focus_window(self.niri.clone(), window.id).await;
-                        }
-                    }
+                    window_utils::move_window_to_named_workspace(
+                        &self.niri,
+                        window,
+                        workspace_name,
+                    )
+                    .await?;
                 }
 
                 // 2. Execute focus command if specified (unified de-duplication)

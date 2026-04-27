@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use log::{debug, warn};
+use log::{debug, info, warn};
 use niri_ipc::{Action, ColumnDisplay, Reply, Request, WorkspaceReferenceArg};
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
@@ -301,41 +301,102 @@ pub async fn is_workspace_empty(niri: &NiriIpc, workspace_id: u64) -> Result<boo
     Ok(workspace_windows.is_empty())
 }
 
-/// Match workspace by exact name or idx
-/// Returns the workspace identifier (name if available, otherwise idx as string)
-/// Matching order: 1. exact name match, 2. exact idx match
-pub async fn match_workspace(target_workspace: &str, niri: NiriIpc) -> Result<Option<String>> {
+/// Move a window to target workspace by name.
+/// If target workspace does not exist, move to first empty workspace and rename it.
+pub async fn move_window_to_named_workspace(
+    niri: &NiriIpc,
+    window: &niri_ipc::Window,
+    target_workspace_name: &str,
+) -> Result<()> {
     let workspaces = niri.get_workspaces_for_mapping().await?;
+    let windows = niri.get_windows().await?;
+    let focused_output = niri.get_focused_output().await.ok().map(|o| o.name);
+    debug!(
+        "Workspace target='{}', focused output={:?}",
+        target_workspace_name, focused_output
+    );
 
-    // First pass: exact name match
-    for workspace in &workspaces {
-        if let Some(ref name) = workspace.name {
-            if name == target_workspace {
-                debug!(
-                    "Matched workspace by name: {} -> {}",
-                    target_workspace, name
-                );
-                return Ok(Some(name.clone()));
-            }
+    // Prefer workspace matched on the focused output to avoid idx/name ambiguity across monitors.
+    let matched_on_focused_output = focused_output.as_ref().and_then(|output_name| {
+        workspaces.iter().find(|ws| {
+            ws.output.as_deref() == Some(output_name.as_str())
+                && (ws.name.as_deref() == Some(target_workspace_name)
+                    || ws.idx.to_string() == target_workspace_name)
+        })
+    });
+
+    let matched_workspace = matched_on_focused_output.or_else(|| {
+        workspaces.iter().find(|ws| {
+            ws.name.as_deref() == Some(target_workspace_name)
+                || ws.idx.to_string() == target_workspace_name
+        })
+    });
+
+    if let Some(target_workspace) = matched_workspace {
+        let is_already_there = window.workspace_id == Some(target_workspace.id);
+        if !is_already_there {
+            info!(
+                "Moving window {} to workspace id={} (idx={}, output={:?}, target='{}')",
+                window.id,
+                target_workspace.id,
+                target_workspace.idx,
+                target_workspace.output,
+                target_workspace_name
+            );
+            niri.send_action(Action::MoveWindowToWorkspace {
+                window_id: Some(window.id),
+                reference: WorkspaceReferenceArg::Id(target_workspace.id),
+                focus: false,
+            })
+            .await?;
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            let _ = focus_window(niri.clone(), window.id).await;
         }
+        return Ok(());
     }
 
-    // Second pass: exact idx match
-    if let Ok(target_idx) = target_workspace.parse::<u8>() {
-        for workspace in &workspaces {
-            if workspace.idx == target_idx {
-                let result = workspace.name.clone().unwrap_or_else(|| workspace.idx.to_string());
-                debug!(
-                    "Matched workspace by idx: {} -> {}",
-                    target_workspace, result
-                );
-                return Ok(Some(result));
-            }
-        }
-    }
+    // Multi-monitor aware:
+    // prefer empty workspace on the currently focused output first.
+    let empty_on_focused_output = focused_output.as_ref().and_then(|output_name| {
+        workspaces.iter().find(|ws| {
+            ws.output.as_deref() == Some(output_name.as_str())
+                && windows.iter().all(|w| w.workspace_id != Some(ws.id))
+        })
+    });
 
-    debug!("No matching workspace found for: {}", target_workspace);
-    Ok(None)
+    let empty_workspace = empty_on_focused_output.or_else(|| {
+        workspaces
+            .iter()
+            .find(|ws| windows.iter().all(|w| w.workspace_id != Some(ws.id)))
+    });
+
+    let Some(empty_workspace) = empty_workspace else {
+        info!(
+            "No empty workspace found for '{}', skip moving window {}",
+            target_workspace_name, window.id
+        );
+        return Ok(());
+    };
+
+    info!(
+        "Workspace '{}' not found, moving window {} to empty workspace id={} (idx={}, output={:?}) and renaming it",
+        target_workspace_name, window.id, empty_workspace.id, empty_workspace.idx, empty_workspace.output
+    );
+    niri.send_action(Action::MoveWindowToWorkspace {
+        window_id: Some(window.id),
+        reference: WorkspaceReferenceArg::Id(empty_workspace.id),
+        focus: false,
+    })
+    .await?;
+    niri.send_action(Action::SetWorkspaceName {
+        name: target_workspace_name.to_string(),
+        workspace: Some(WorkspaceReferenceArg::Id(empty_workspace.id)),
+    })
+    .await?;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let _ = focus_window(niri.clone(), window.id).await;
+
+    Ok(())
 }
 
 /// Check if a window is in the current workspace
