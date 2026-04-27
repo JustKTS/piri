@@ -10,12 +10,16 @@ use crate::plugins::window_utils::{self, get_focused_window};
 use crate::plugins::FromConfig;
 
 /// Runtime-only plugin: marks are not persisted to disk.
-#[derive(Debug, Clone, Default)]
-pub struct MarkPluginConfig;
+#[derive(Debug, Clone)]
+pub struct MarkPluginConfig {
+    pub refocus: bool,
+}
 
 impl FromConfig for MarkPluginConfig {
-    fn from_config(_config: &Config) -> Option<Self> {
-        Some(Self)
+    fn from_config(config: &Config) -> Option<Self> {
+        Some(Self {
+            refocus: config.piri.mark.refocus,
+        })
     }
 }
 
@@ -23,14 +27,20 @@ pub struct MarkPlugin {
     niri: NiriIpc,
     /// Mark name → window id
     marks: HashMap<String, u64>,
+    /// Previous focused window id (for refocus feature)
+    previous_window: Option<u64>,
+    /// Enable refocus feature
+    refocus: bool,
 }
 
 impl MarkPlugin {
-    fn new(niri: NiriIpc) -> Self {
-        info!("Mark plugin initialized");
+    fn new(niri: NiriIpc, config: MarkPluginConfig) -> Self {
+        info!("Mark plugin initialized (refocus: {})", config.refocus);
         Self {
             niri,
             marks: HashMap::new(),
+            previous_window: None,
+            refocus: config.refocus,
         }
     }
 
@@ -54,6 +64,29 @@ impl MarkPlugin {
                 .get(name)
                 .copied()
                 .context("internal: mark disappeared after existence check")?;
+
+            // Try to get current focused window (may fail on empty workspace)
+            if let Ok(current) = get_focused_window(&self.niri).await {
+                if self.refocus && current.id == id {
+                    if let Some(prev_id) = self.previous_window {
+                        if window_utils::window_exists(&self.niri, prev_id).await? {
+                            debug!("Refocusing to previous window {}", prev_id);
+                            // Swap: set previous to current marked window for next toggle
+                            self.previous_window = Some(id);
+                            window_utils::focus_window(self.niri.clone(), prev_id).await?;
+                            return Ok(());
+                        }
+                    }
+                }
+
+                debug!("Saving previous window {} before focusing mark", current.id);
+                self.previous_window = Some(current.id);
+            } else {
+                // No focused window (empty workspace), clear previous_window
+                debug!("No focused window, clearing previous_window");
+                self.previous_window = None;
+            }
+
             window_utils::focus_window(self.niri.clone(), id).await?;
         } else {
             self.bind_focused(name).await?;
@@ -74,11 +107,13 @@ impl MarkPlugin {
 impl crate::plugins::Plugin for MarkPlugin {
     type Config = MarkPluginConfig;
 
-    fn new(niri: NiriIpc, _config: Self::Config) -> Self {
-        Self::new(niri)
+    fn new(niri: NiriIpc, config: Self::Config) -> Self {
+        Self::new(niri, config)
     }
 
-    async fn update_config(&mut self, _config: Self::Config) -> Result<()> {
+    async fn update_config(&mut self, config: Self::Config) -> Result<()> {
+        self.refocus = config.refocus;
+        info!("Mark plugin updated (refocus: {})", self.refocus);
         Ok(())
     }
 

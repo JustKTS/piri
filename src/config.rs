@@ -149,6 +149,15 @@ pub struct PiriConfig {
     pub swallow: SwallowSection,
     #[serde(default)]
     pub workspace_rule: WorkspaceRuleSection,
+    #[serde(default)]
+    pub mark: MarkSection,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct MarkSection {
+    /// If true, toggling a mark that is already focused will return to the previous window
+    #[serde(default)]
+    pub refocus: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

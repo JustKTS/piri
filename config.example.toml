@@ -140,6 +140,9 @@ app_id = 'singleton.term'
 #   piri mark {name} toggle
 #   piri mark {name} add
 #   piri mark {name} delete
+# Optional: [piri.mark] for refocus feature
+# [piri.mark]
+# refocus = true  # Toggle same mark again to jump back to previous window
 
 # Sticky plugin:
 # Runtime-only sticky floating window state.

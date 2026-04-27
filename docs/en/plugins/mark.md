@@ -11,7 +11,15 @@ Enable the plugin:
 mark = true
 ```
 
-No extra `[mark.*]` tables are required; all marks are created or removed at runtime via the CLI.
+Optional mark settings:
+
+```toml
+[piri.mark]
+# If true, toggling a mark that is already focused will return to the previous window
+refocus = false
+```
+
+All marks are created or removed at runtime via the CLI. The `refocus` setting supports hot-reload.
 
 ## Command Line
 
@@ -41,6 +49,15 @@ piri mark a delete   # Clear a
 3. **`delete`**: Removes the binding for `name`; idempotent.
 
 To **change** which window a mark points to while the old binding is still valid, use **`add`**, or **`delete`** then **`toggle`**.
+
+### Refocus Feature
+
+When `[piri.mark] refocus = true` is set:
+
+- The plugin remembers the previously focused window when you toggle a mark.
+- If you toggle the **same mark again** while its window is already focused, piri will **jump back to the previous window** instead of refocusing the marked window.
+- This is useful for quick switching between two windows (e.g., code editor and terminal).
+- Works correctly on empty workspaces (no focused window).
 
 ## Niri Keybindings
 

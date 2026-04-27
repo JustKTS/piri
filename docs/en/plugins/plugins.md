@@ -74,6 +74,7 @@ Named marks for windows via `piri mark …`: bind/focus windows. Bindings in dae
 **Key features**:
 - `toggle`, `add`, and `delete` operations
 - Works well with Niri `spawn` keybindings or a launcher
+- Optional refocus: toggle same mark to jump back to previous window
 
 ### [Sticky Plugin](sticky.md)
 
