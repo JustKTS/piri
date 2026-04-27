@@ -79,7 +79,7 @@ enum Commands {
     Completion {
         /// Shell type
         #[arg(value_enum)]
-        shell: Shell,
+        shell: CompletionShell,
     },
 }
 
@@ -132,7 +132,7 @@ enum StickyAction {
 }
 
 #[derive(Clone, ValueEnum)]
-enum Shell {
+enum CompletionShell {
     /// Bash completion script
     Bash,
     /// Zsh completion script
@@ -316,13 +316,19 @@ async fn async_main() -> Result<()> {
         Commands::Completion { shell } => {
             let mut cmd = Cli::command();
             match shell {
-                Shell::Bash => generate(shells::Bash, &mut cmd, "piri", &mut io::stdout()),
-                Shell::Zsh => generate(shells::Zsh, &mut cmd, "piri", &mut io::stdout()),
-                Shell::Fish => generate(shells::Fish, &mut cmd, "piri", &mut io::stdout()),
-                Shell::PowerShell => {
+                CompletionShell::Bash => {
+                    generate(shells::Bash, &mut cmd, "piri", &mut io::stdout())
+                }
+                CompletionShell::Zsh => generate(shells::Zsh, &mut cmd, "piri", &mut io::stdout()),
+                CompletionShell::Fish => {
+                    generate(shells::Fish, &mut cmd, "piri", &mut io::stdout())
+                }
+                CompletionShell::PowerShell => {
                     generate(shells::PowerShell, &mut cmd, "piri", &mut io::stdout())
                 }
-                Shell::Elvish => generate(shells::Elvish, &mut cmd, "piri", &mut io::stdout()),
+                CompletionShell::Elvish => {
+                    generate(shells::Elvish, &mut cmd, "piri", &mut io::stdout())
+                }
             }
         }
     }

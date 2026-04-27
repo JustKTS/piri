@@ -119,4 +119,3 @@ cargo fmt -- --check  # 检查格式（不修改）
 - `anyhow`: 错误处理
 - `log` / `env_logger`: 日志系统
 - `niri-ipc`: Niri IPC 客户端库
-

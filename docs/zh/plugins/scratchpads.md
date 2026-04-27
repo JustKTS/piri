@@ -4,7 +4,7 @@
 
 ## 演示视频
 
-![Scratchpads 演示视频](../assets/scratchpads.mp4)
+![Scratchpads 演示视频](../../assets/scratchpads.mp4)
 
 ## 配置
 

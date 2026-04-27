@@ -67,7 +67,7 @@ open_on_workspace = "browser"
 - **`focus_command`** (optional): Command to execute when the window gains focus
 - **`focus_command_once`** (optional, default: `false`): If set to `true`, the `focus_command` will only execute once globally for the rule, regardless of how many windows match it. See [issue #1](https://github.com/Asthestarsfalll/piri/issues/1) for more details.
 
-**Note**: 
+**Note**:
 - At least one of `app_id` or `title` must be specified
 - At least one of `open_on_workspace` or `focus_command` must be specified
 - If both `app_id` and `title` are specified, either match works (OR logic)

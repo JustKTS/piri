@@ -419,27 +419,13 @@ impl ScratchpadManager {
             } else {
                 // Already visible but elsewhere, re-record focus and it will be moved in sync_state
                 let focused = self.niri.get_focused_window_id().await?;
-                state.previous_focused_window = if let Some(focused_id) = focused {
-                    if scratchpad_window_ids.contains(&focused_id) {
-                        None
-                    } else {
-                        Some(focused_id)
-                    }
-                } else {
-                    None
-                };
+                state.previous_focused_window =
+                    focused.filter(|&focused_id| !scratchpad_window_ids.contains(&focused_id));
             }
         } else {
             let focused = self.niri.get_focused_window_id().await?;
-            state.previous_focused_window = if let Some(focused_id) = focused {
-                if scratchpad_window_ids.contains(&focused_id) {
-                    None
-                } else {
-                    Some(focused_id)
-                }
-            } else {
-                None
-            };
+            state.previous_focused_window =
+                focused.filter(|&focused_id| !scratchpad_window_ids.contains(&focused_id));
             state.is_visible = true;
         }
 
@@ -635,8 +621,8 @@ impl crate::plugins::Plugin for ScratchpadsPlugin {
                     name, direction, swallow_to_focus
                 );
 
-                let direction = Direction::from_str(direction)
-                    .map_err(|e| anyhow::anyhow!("Invalid direction: {}", e))?;
+                let direction =
+                    direction.parse().map_err(|e| anyhow::anyhow!("Invalid direction: {}", e))?;
 
                 self.manager
                     .add_current_window(

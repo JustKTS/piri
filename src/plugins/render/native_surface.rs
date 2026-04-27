@@ -442,7 +442,7 @@ fn event_loop(
 /// Handle a timerfd tick: advance animation and re-render.
 fn handle_animation_frame(
     state: &mut AppState,
-    compositor: &wl_compositor::WlCompositor,
+    _compositor: &wl_compositor::WlCompositor,
     shm: &wl_shm::WlShm,
     qh: &QueueHandle<AppState>,
 ) -> Result<()> {
@@ -763,6 +763,7 @@ fn render_to_surface(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_gradient(
     pixels: &mut [u8],
     width: i32,

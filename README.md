@@ -275,7 +275,11 @@ open_on_workspace = "browser"
 
 ### Workspace Rule
 
-![Autofill](./assets/autofill.mp4)
+![Autofill - 右对齐](./assets/autofill.mp4)
+
+![Autofill - 列合并](./assets/autofill_1.mp4)
+
+![Autofill - 完整流程](./assets/autofill_2.mp4)
 
 ![Auto Tile](./assets/auto_tile.mp4)
 
@@ -413,7 +417,7 @@ piri sticky delete
 
 ![手动触发](./assets/window_order.mp4)
 
-![事件驱动](./assets/window_order_envent.mp4)
+![事件驱动](./assets/window_order_event.mp4)
 
 按权重自动重排窗口，权重越大越靠左。
 

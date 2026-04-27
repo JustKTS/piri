@@ -428,22 +428,22 @@ pub fn calculate_position(
     margin: u32,
 ) -> (i32, i32) {
     match direction {
-        Direction::FromTop => {
+        Direction::Top => {
             let x = ((output_width - window_width) / 2) as i32;
             let y = margin as i32;
             (x, y)
         }
-        Direction::FromBottom => {
+        Direction::Bottom => {
             let x = ((output_width - window_width) / 2) as i32;
             let y = (output_height - window_height - margin) as i32;
             (x, y)
         }
-        Direction::FromLeft => {
+        Direction::Left => {
             let x = margin as i32;
             let y = ((output_height - window_height) / 2) as i32;
             (x, y)
         }
-        Direction::FromRight => {
+        Direction::Right => {
             let x = (output_width - window_width - margin) as i32;
             let y = ((output_height - window_height) / 2) as i32;
             (x, y)
@@ -462,10 +462,10 @@ pub fn extract_margin(
     y: i32,
 ) -> u32 {
     let margin = match direction {
-        Direction::FromTop => y,
-        Direction::FromBottom => output_height as i32 - window_height as i32 - y,
-        Direction::FromLeft => x,
-        Direction::FromRight => output_width as i32 - window_width as i32 - x,
+        Direction::Top => y,
+        Direction::Bottom => output_height as i32 - window_height as i32 - y,
+        Direction::Left => x,
+        Direction::Right => output_width as i32 - window_width as i32 - x,
     };
     margin.max(0) as u32
 }
@@ -481,22 +481,22 @@ pub fn calculate_hide_position(
     margin: u32,
 ) -> (i32, i32) {
     match direction {
-        Direction::FromTop => {
+        Direction::Top => {
             let x = ((output_width - window_width) / 2) as i32;
             let y = -((window_height + margin) as i32);
             (x, y)
         }
-        Direction::FromBottom => {
+        Direction::Bottom => {
             let x = ((output_width - window_width) / 2) as i32;
             let y = (output_height + margin) as i32;
             (x, y)
         }
-        Direction::FromLeft => {
+        Direction::Left => {
             let x = -((window_width + margin) as i32);
             let y = ((output_height - window_height) / 2) as i32;
             (x, y)
         }
-        Direction::FromRight => {
+        Direction::Right => {
             let x = (output_width + margin) as i32;
             let y = ((output_height - window_height) / 2) as i32;
             (x, y)
@@ -792,11 +792,9 @@ pub async fn perform_swallow(
     let workspace_ref = if let Some(workspace_id) = parent_window.workspace_id {
         if child_window.workspace_id != Some(workspace_id) {
             let workspaces = niri.get_workspaces_for_mapping().await?;
-            if let Some(workspace) = workspaces.iter().find(|ws| ws.id == workspace_id) {
-                Some(workspace.name.as_ref().cloned().unwrap_or_else(|| workspace.idx.to_string()))
-            } else {
-                None
-            }
+            workspaces.iter().find(|ws| ws.id == workspace_id).map(|workspace| {
+                workspace.name.as_ref().cloned().unwrap_or_else(|| workspace.idx.to_string())
+            })
         } else {
             None
         }

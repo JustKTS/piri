@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use anyhow::{Context, Result};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
@@ -9,34 +11,37 @@ use crate::plugins::empty::EmptyPluginConfig;
 /// Direction from which the scratchpad appears
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {
-    FromTop,
-    FromBottom,
-    FromLeft,
-    FromRight,
+    Top,
+    Bottom,
+    Left,
+    Right,
 }
 
-impl Direction {
-    /// Convert string to Direction
-    pub fn from_str(s: &str) -> Result<Self> {
+impl std::str::FromStr for Direction {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
         match s {
-            "fromTop" => Ok(Direction::FromTop),
-            "fromBottom" => Ok(Direction::FromBottom),
-            "fromLeft" => Ok(Direction::FromLeft),
-            "fromRight" => Ok(Direction::FromRight),
+            "fromTop" => Ok(Direction::Top),
+            "fromBottom" => Ok(Direction::Bottom),
+            "fromLeft" => Ok(Direction::Left),
+            "fromRight" => Ok(Direction::Right),
             _ => anyhow::bail!(
                 "Invalid direction: {}. Must be one of: fromTop, fromBottom, fromLeft, fromRight",
                 s
             ),
         }
     }
+}
 
+impl Direction {
     /// Convert Direction to string
     pub fn as_str(&self) -> &'static str {
         match self {
-            Direction::FromTop => "fromTop",
-            Direction::FromBottom => "fromBottom",
-            Direction::FromLeft => "fromLeft",
-            Direction::FromRight => "fromRight",
+            Direction::Top => "fromTop",
+            Direction::Bottom => "fromBottom",
+            Direction::Left => "fromLeft",
+            Direction::Right => "fromRight",
         }
     }
 }
@@ -56,11 +61,11 @@ impl<'de> Deserialize<'de> for Direction {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        Direction::from_str(&s).map_err(serde::de::Error::custom)
+        s.parse().map_err(serde::de::Error::custom)
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Config {
     #[serde(default)]
     pub niri: NiriConfig,
@@ -126,19 +131,13 @@ impl Default for SwallowSection {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NiriConfig {
     /// Path to niri socket (default: $XDG_RUNTIME_DIR/niri or /tmp/niri)
     pub socket_path: Option<String>,
 }
 
-impl Default for NiriConfig {
-    fn default() -> Self {
-        Self { socket_path: None }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PiriConfig {
     #[serde(default)]
     pub scratchpad: ScratchpadDefaults,
@@ -152,19 +151,7 @@ pub struct PiriConfig {
     pub workspace_rule: WorkspaceRuleSection,
 }
 
-impl Default for PiriConfig {
-    fn default() -> Self {
-        Self {
-            scratchpad: ScratchpadDefaults::default(),
-            plugins: PluginsConfig::default(),
-            window_order: WindowOrderSection::default(),
-            swallow: SwallowSection::default(),
-            workspace_rule: WorkspaceRuleSection::default(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PluginsConfig {
     #[serde(default)]
     pub scratchpads: Option<bool>,
@@ -188,24 +175,6 @@ pub struct PluginsConfig {
     pub sticky: Option<bool>,
     #[serde(rename = "empty_config", default)]
     pub empty_config: Option<EmptyPluginConfig>,
-}
-
-impl Default for PluginsConfig {
-    fn default() -> Self {
-        Self {
-            scratchpads: None,
-            empty: None,
-            window_rule: None,
-            autofill: None,
-            singleton: None,
-            window_order: None,
-            swallow: None,
-            workspace_rule: None,
-            mark: None,
-            sticky: None,
-            empty_config: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -467,7 +436,7 @@ pub struct WorkspaceRuleConfig {
 }
 
 /// Workspace rule section in piri config (default settings)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct WorkspaceRuleSection {
     /// Default auto width configuration
     #[serde(deserialize_with = "deserialize_auto_width", default)]
@@ -484,18 +453,6 @@ pub struct WorkspaceRuleSection {
     /// Default EdgePulse indicator config for all workspaces.
     #[serde(default)]
     pub edge_pulse: EdgePulseConfig,
-}
-
-impl Default for WorkspaceRuleSection {
-    fn default() -> Self {
-        Self {
-            auto_width: Vec::new(),
-            auto_tile: false,
-            auto_fill: false,
-            auto_maximize: false,
-            edge_pulse: EdgePulseConfig::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -613,22 +570,6 @@ fn default_right_end() -> String {
     "#ff7a1f".to_string()
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            niri: NiriConfig::default(),
-            piri: PiriConfig::default(),
-            scratchpads: HashMap::new(),
-            empty: HashMap::new(),
-            singleton: HashMap::new(),
-            window_rule: Vec::new(),
-            window_order: HashMap::new(),
-            swallow: Vec::new(),
-            workspace_rule: HashMap::new(),
-        }
-    }
-}
-
 // Helper to convert TOML table to ScratchpadConfig
 impl TryFrom<toml::Table> for ScratchpadConfig {
     type Error = anyhow::Error;
@@ -638,7 +579,7 @@ impl TryFrom<toml::Table> for ScratchpadConfig {
             .get("direction")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("Missing 'direction' field"))
-            .and_then(|s| Direction::from_str(s))?;
+            .and_then(Direction::from_str)?;
 
         let command = table
             .get("command")

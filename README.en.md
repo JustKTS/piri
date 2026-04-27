@@ -269,7 +269,11 @@ For detailed documentation, please refer to the [Window Rule documentation](docs
 
 ### Workspace Rule
 
-![Autofill](./assets/autofill.mp4)
+![Autofill - Right Alignment](./assets/autofill.mp4)
+
+![Autofill - Column Merge](./assets/autofill_1.mp4)
+
+![Autofill - Full Workflow](./assets/autofill_2.mp4)
 
 ![Auto Tile](./assets/auto_tile.mp4)
 
@@ -384,7 +388,7 @@ For details, see the [Sticky documentation](docs/en/plugins/sticky.md).
 
 ![Manual Trigger](./assets/window_order.mp4)
 
-![Event-Driven](./assets/window_order_envent.mp4)
+![Event-Driven](./assets/window_order_event.mp4)
 
 Weight-based window reordering. Larger weight = further left.
 

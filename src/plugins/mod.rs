@@ -72,6 +72,7 @@ impl FromConfig for () {
 
 macro_rules! register_plugins {
     ($($name:expr => $variant:ident($module:ident::$struct:ident)),* $(,)?) => {
+        #[allow(clippy::large_enum_variant)]
         pub enum PluginEnum {
             $($variant($module::$struct),)*
         }
@@ -153,6 +154,12 @@ pub struct PluginManager {
     plugins: Vec<PluginEnum>,
     event_listener_handle: Option<tokio::task::JoinHandle<()>>,
     event_sender: Option<mpsc::UnboundedSender<Event>>,
+}
+
+impl Default for PluginManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PluginManager {

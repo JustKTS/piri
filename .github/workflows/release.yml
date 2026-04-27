@@ -151,4 +151,3 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(steps.tag.outputs.TAG_NAME, '-') }}
-

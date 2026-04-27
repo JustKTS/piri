@@ -41,7 +41,7 @@ async fn start_config_watcher(
         let _watcher = watcher;
         let mut debouncer = Debounce::new();
 
-        while let Some(_) = rx.recv().await {
+        while rx.recv().await.is_some() {
             let handler = handler.clone();
             let plugin_manager = plugin_manager.clone();
             let niri = niri.clone();

@@ -61,7 +61,7 @@ piri window_order toggle
 
 **注意**：自动触发仅在配置的 `workspaces` 列表中执行。如果未配置 `workspaces` 或列表为空，则应用到所有工作区。
 
-![Window Order - 事件监听自动触发](../../assets/window_order_envent.mp4)
+![Window Order - 事件监听自动触发](../../assets/window_order_event.mp4)
 
 ## 工作原理
 

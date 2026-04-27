@@ -61,7 +61,7 @@ If `enable_event_listener` is enabled, the plugin automatically reorders windows
 
 **Note**: Automatic trigger only works in workspaces specified in the `workspaces` configuration. If `workspaces` is not configured or empty, applies to all workspaces.
 
-![Window Order - Event-Driven Automatic Trigger](../../assets/window_order_envent.mp4)
+![Window Order - Event-Driven Automatic Trigger](../../assets/window_order_event.mp4)
 
 ## How It Works
 

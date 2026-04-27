@@ -67,7 +67,7 @@ open_on_workspace = "browser"
 - `focus_command` (可选): 窗口获焦时执行命令
 - `focus_command_once` (默认 `false`): 规则级单次执行（[issue #1](https://github.com/Asthestarsfalll/piri/issues/1)）
 
-**注意**: 
+**注意**:
 - 至少指定 `app_id`/`title` 之一
 - 至少指定 `open_on_workspace`/`focus_command` 之一
 - `app_id`/`title` 可单独或列表形式，任一匹配即触发

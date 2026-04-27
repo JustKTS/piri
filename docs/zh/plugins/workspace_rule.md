@@ -12,13 +12,13 @@
 
 ## 演示视频
 
-![autofill 1](../assets/autofill.mp4)
+![Autofill - 右对齐](../../assets/autofill.mp4)
 
-![autofill 2](../assets/autofill_1.mp4)
+![Autofill - 列合并](../../assets/autofill_1.mp4)
 
-![autofill 3](../assets/autofill_2.mp4)
+![Autofill - 完整流程](../../assets/autofill_2.mp4)
 
-![auto_tile](../assets/auto_tile.mp4)
+![Auto Tile](../../assets/auto_tile.mp4)
 
 ## 配置
 
