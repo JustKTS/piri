@@ -119,7 +119,7 @@ Enable the piri workspace_rule plugin and configure `auto_fill = true` to automa
 
 ### PID-based Matching Example
 
-![Swallow - PID-based Matching](../../assets/swallow_pid.mp4)
+https://github.com/user-attachments/assets/51567d89-8ca8-4f4a-b2ca-732dfc0741c9
 
 Using the default PID matching (`use_pid_matching = true`), the plugin automatically traces the process tree to find parent-child relationships.
 
@@ -134,7 +134,7 @@ child_app_id = [".*mpv.*"]
 
 ### Rule-based Matching Example
 
-![Swallow - Rule-based Matching](../../assets/swallow_rule.mp4)
+https://github.com/user-attachments/assets/9968e97f-fdea-4211-a007-717edf703e93
 
 Using `app_id` and `title` patterns to match parent windows.
 

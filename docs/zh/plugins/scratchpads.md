@@ -4,7 +4,7 @@
 
 ## 演示视频
 
-![Scratchpads 演示视频](../../assets/scratchpads.mp4)
+https://github.com/user-attachments/assets/1c40d75b-310a-4503-9d59-92f0479a54d5
 
 ## 配置
 

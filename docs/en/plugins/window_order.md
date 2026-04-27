@@ -50,7 +50,7 @@ piri window_order toggle
 
 **Note**: Manual trigger works in any workspace, regardless of `workspaces` configuration.
 
-![Window Order - Manual Trigger](../../assets/window_order.mp4)
+https://github.com/user-attachments/assets/2c9cbbb4-7001-44ce-acfd-afb51dfbc372
 
 ### Automatic Trigger
 
@@ -61,7 +61,7 @@ If `enable_event_listener` is enabled, the plugin automatically reorders windows
 
 **Note**: Automatic trigger only works in workspaces specified in the `workspaces` configuration. If `workspaces` is not configured or empty, applies to all workspaces.
 
-![Window Order - Event-Driven Automatic Trigger](../../assets/window_order_event.mp4)
+https://github.com/user-attachments/assets/9818d478-3a33-456b-8367-548bb8ab7da7
 
 ## How It Works
 

@@ -12,13 +12,13 @@
 
 ## 演示视频
 
-![Autofill - 右对齐](../../assets/autofill.mp4)
+https://github.com/user-attachments/assets/092a383c-993b-42b5-9b89-b78b0807b436
 
-![Autofill - 列合并](../../assets/autofill_1.mp4)
+https://github.com/user-attachments/assets/b48b0465-0101-4298-9935-22f46d1a2658
 
-![Autofill - 完整流程](../../assets/autofill_2.mp4)
+https://github.com/user-attachments/assets/3b8dc835-473c-4b6e-b684-02a6951b63f9
 
-![Auto Tile](../../assets/auto_tile.mp4)
+https://github.com/user-attachments/assets/2e9e2c86-b9ef-44f1-a896-46473b93b417
 
 ## 配置
 

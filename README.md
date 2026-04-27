@@ -125,7 +125,7 @@ piri completion fish > ~/.config/fish/completions/piri.fish
 
 ### Scratchpads
 
-![Scratchpads](./assets/scratchpads.mp4)
+https://github.com/user-attachments/assets/1c40d75b-310a-4503-9d59-92f0479a54d5
 
 快速显示/隐藏常用窗口，支持跨工作区与显示器。特性：**动态添加**、**保留手动调整**、**隐藏后移至指定工作区**、**吞入聚焦窗口**（`swallow_to_focus`）、**Sticky 跟随**（`sticky`，委托 sticky 插件）、**失焦自动隐藏**（`auto_hide_on_focus_loss`）及**非浮动窗口直接聚焦**。
 
@@ -275,13 +275,13 @@ open_on_workspace = "browser"
 
 ### Workspace Rule
 
-![Autofill - 右对齐](./assets/autofill.mp4)
+https://github.com/user-attachments/assets/092a383c-993b-42b5-9b89-b78b0807b436
 
-![Autofill - 列合并](./assets/autofill_1.mp4)
+https://github.com/user-attachments/assets/b48b0465-0101-4298-9935-22f46d1a2658
 
-![Autofill - 完整流程](./assets/autofill_2.mp4)
+https://github.com/user-attachments/assets/3b8dc835-473c-4b6e-b684-02a6951b63f9
 
-![Auto Tile](./assets/auto_tile.mp4)
+https://github.com/user-attachments/assets/2e9e2c86-b9ef-44f1-a896-46473b93b417
 
 工作区布局管理，提供自动宽度、平铺、对齐与最大化。内置 EdgePulse 边缘提示（支持动画），聚焦列到达边缘时渲染视觉提示。
 
@@ -415,9 +415,9 @@ piri sticky delete
 
 ### Window Order
 
-![手动触发](./assets/window_order.mp4)
+https://github.com/user-attachments/assets/2c9cbbb4-7001-44ce-acfd-afb51dfbc372
 
-![事件驱动](./assets/window_order_event.mp4)
+https://github.com/user-attachments/assets/9818d478-3a33-456b-8367-548bb8ab7da7
 
 按权重自动重排窗口，权重越大越靠左。
 
@@ -454,9 +454,9 @@ piri window_order toggle
 
 ### Swallow
 
-![Swallow Rule](./assets/swallow_rule.mp4)
+https://github.com/user-attachments/assets/9968e97f-fdea-4211-a007-717edf703e93
 
-![Swallow Pid](./assets/swallow_pid.mp4)
+https://github.com/user-attachments/assets/51567d89-8ca8-4f4a-b2ca-732dfc0741c9
 
 子窗口打开时自动隐藏父窗口，让子窗口替换父窗口位置。适用于终端启动图片查看器或媒体播放器等场景。
 

@@ -2,8 +2,9 @@
 
 EdgePulse is a sub-feature of the [Workspace Rule](workspace_rule.md) plugin. It renders left/right edge hints on the screen when the focused column reaches the workspace edge, providing a visual cue for navigation boundaries.
 
-![edge_pulse_1.png](../assets/edge_pulse_1.png)
-![edge_pulse_2.png](../assets/edge_pulse_2.png)
+<img width="3837" height="2146" alt="Image" src="https://github.com/user-attachments/assets/3d4f763d-ceec-42c2-a535-c29af36cba63" />
+
+<img width="3837" height="2147" alt="Image" src="https://github.com/user-attachments/assets/8a498dec-eb8d-4648-83dd-e71a453754bb" />
 
 ## Configuration
 

@@ -4,7 +4,7 @@ Scratchpads allows you to quickly show and hide windows of frequently used appli
 
 ## Demo Video
 
-![Scratchpads Demo Video](../../assets/scratchpads.mp4)
+https://github.com/user-attachments/assets/1c40d75b-310a-4503-9d59-92f0479a54d5
 
 ## Configuration
 

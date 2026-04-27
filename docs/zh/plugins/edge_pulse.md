@@ -2,8 +2,9 @@
 
 EdgePulse 是 [Workspace Rule](workspace_rule.md) 插件的子功能。当当前聚焦列到达工作区左/右边缘时，在屏幕对应边缘渲染提示指示器，提供导航边界的视觉提示。
 
-![edge_pulse_1.png](../assets/edge_pulse_1.png)
-![edge_pulse_2.png](../assets/edge_pulse_2.png)
+<img width="3837" height="2146" alt="Image" src="https://github.com/user-attachments/assets/3d4f763d-ceec-42c2-a535-c29af36cba63" />
+
+<img width="3837" height="2147" alt="Image" src="https://github.com/user-attachments/assets/8a498dec-eb8d-4648-83dd-e71a453754bb" />
 
 ## 配置
 

@@ -124,7 +124,7 @@ piri completion fish > ~/.config/fish/completions/piri.fish
 
 ### Scratchpads
 
-![Scratchpads](./assets/scratchpads.mp4)
+https://github.com/user-attachments/assets/1c40d75b-310a-4503-9d59-92f0479a54d5
 
 Quick show/hide windows, cross-workspace/monitor. Features: **dynamic addition**, **retains manual adjustments**, **auto-move on hide**, **swallow to focus** (`swallow_to_focus`), **sticky follow** (delegated to sticky plugin), **auto-hide on focus loss** (`auto_hide_on_focus_loss`, floating only), **non-floating direct focus**.
 
@@ -269,13 +269,13 @@ For detailed documentation, please refer to the [Window Rule documentation](docs
 
 ### Workspace Rule
 
-![Autofill - Right Alignment](./assets/autofill.mp4)
+https://github.com/user-attachments/assets/092a383c-993b-42b5-9b89-b78b0807b436
 
-![Autofill - Column Merge](./assets/autofill_1.mp4)
+https://github.com/user-attachments/assets/b48b0465-0101-4298-9935-22f46d1a2658
 
-![Autofill - Full Workflow](./assets/autofill_2.mp4)
+https://github.com/user-attachments/assets/3b8dc835-473c-4b6e-b684-02a6951b63f9
 
-![Auto Tile](./assets/auto_tile.mp4)
+https://github.com/user-attachments/assets/2e9e2c86-b9ef-44f1-a896-46473b93b417
 
 Workspace layout management: auto-width, tiling, alignment, maximization. Built-in EdgePulse edge indicators (animated) render visual hints when focused column reaches workspace edge.
 
@@ -386,9 +386,9 @@ For details, see the [Sticky documentation](docs/en/plugins/sticky.md).
 
 ### Window Order
 
-![Manual Trigger](./assets/window_order.mp4)
+https://github.com/user-attachments/assets/2c9cbbb4-7001-44ce-acfd-afb51dfbc372
 
-![Event-Driven](./assets/window_order_event.mp4)
+https://github.com/user-attachments/assets/9818d478-3a33-456b-8367-548bb8ab7da7
 
 Weight-based window reordering. Larger weight = further left.
 
@@ -425,9 +425,9 @@ For detailed documentation, please refer to the [Window Order documentation](doc
 
 ### Swallow
 
-![Swallow Rule](./assets/swallow_rule.mp4)
+https://github.com/user-attachments/assets/9968e97f-fdea-4211-a007-717edf703e93
 
-![Swallow Pid](./assets/swallow_pid.mp4)
+https://github.com/user-attachments/assets/51567d89-8ca8-4f4a-b2ca-732dfc0741c9
 
 Hides parent windows when child opens, replacing parent position. Ideal for terminal-spawned viewers/players.
 

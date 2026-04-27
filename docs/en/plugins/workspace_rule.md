@@ -14,13 +14,13 @@ The Workspace Rule plugin provides the following features:
 
 ## Demo Videos
 
-![Autofill - Right Alignment](../../assets/autofill.mp4)
+https://github.com/user-attachments/assets/092a383c-993b-42b5-9b89-b78b0807b436
 
-![Autofill - Column Merge](../../assets/autofill_1.mp4)
+https://github.com/user-attachments/assets/b48b0465-0101-4298-9935-22f46d1a2658
 
-![Autofill - Full Workflow](../../assets/autofill_2.mp4)
+https://github.com/user-attachments/assets/3b8dc835-473c-4b6e-b684-02a6951b63f9
 
-![Auto Tile](../../assets/auto_tile.mp4)
+https://github.com/user-attachments/assets/2e9e2c86-b9ef-44f1-a896-46473b93b417
 
 ## Configuration
 
