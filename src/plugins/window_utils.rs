@@ -101,6 +101,43 @@ pub async fn focus_window(niri: NiriIpc, window_id: u64) -> Result<()> {
     niri.focus_window(window_id).await
 }
 
+/// Try to refocus to the previous window if the target window is currently focused.
+/// Returns true if refocus was performed, false otherwise.
+/// This is a shared function used by both mark and scratchpads plugins.
+pub async fn try_refocus_to_previous(
+    niri: &NiriIpc,
+    target_window_id: u64,
+    previous_window: &mut Option<u64>,
+) -> Result<bool> {
+    // Get current focused window
+    let current = match get_focused_window(niri).await {
+        Ok(window) => window,
+        Err(_) => return Ok(false),
+    };
+
+    // If current focused window is not the target, no refocus needed
+    if current.id != target_window_id {
+        return Ok(false);
+    }
+
+    // If there's a previous window and it exists, switch to it
+    if let Some(prev_id) = *previous_window {
+        if window_exists(niri, prev_id).await? {
+            debug!(
+                "Refocusing from window {} to previous window {}",
+                target_window_id, prev_id
+            );
+            // Swap: set previous to current target window for next toggle
+            *previous_window = Some(target_window_id);
+            // Focus the previous window
+            focus_window(niri.clone(), prev_id).await?;
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
 pub async fn get_focused_window(niri: &NiriIpc) -> Result<Window> {
     let focused_window_id = niri.get_focused_window_id().await?;
     let window_id = focused_window_id.ok_or_else(|| anyhow::anyhow!("No focused window found"))?;

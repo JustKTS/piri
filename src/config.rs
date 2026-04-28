@@ -302,6 +302,9 @@ pub struct ScratchpadConfig {
     /// If true, scratchpad will automatically hide when it loses focus
     #[serde(default)]
     pub auto_hide_on_focus_loss: bool,
+    /// If true, when the scratchpad is visible and focused, toggle will refocus to the previous window
+    #[serde(default)]
+    pub refocus: bool,
 }
 
 impl ScratchpadConfig {
@@ -621,6 +624,8 @@ impl TryFrom<toml::Table> for ScratchpadConfig {
         let auto_hide_on_focus_loss =
             table.get("auto_hide_on_focus_loss").and_then(|v| v.as_bool()).unwrap_or(false);
 
+        let refocus = table.get("refocus").and_then(|v| v.as_bool()).unwrap_or(false);
+
         if sticky && auto_hide_on_focus_loss {
             anyhow::bail!(
                 "'sticky' and 'auto_hide_on_focus_loss' cannot both be enabled for a scratchpad"
@@ -636,6 +641,7 @@ impl TryFrom<toml::Table> for ScratchpadConfig {
             swallow_to_focus,
             sticky,
             auto_hide_on_focus_loss,
+            refocus,
         })
     }
 }

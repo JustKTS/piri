@@ -387,14 +387,52 @@ impl ScratchpadManager {
         // 2. Ensure window exists and is set up
         let window_id = self.ensure_window_id(name).await?;
 
-        // 3. Check if window is floating, if not, just focus it
+        // Get config early to check refocus setting
+        let config = self.states.get(name).map(|s| s.config.clone()).context("State not found")?;
+
+        // 3. Check if window is floating, if not, handle as tiled window
         if let Some(window) = self.niri.get_windows().await?.into_iter().find(|w| w.id == window_id)
         {
+            debug!(
+                "Scratchpad '{}' window {} floating status: {}",
+                name, window_id, window.floating
+            );
             if !window.floating {
                 debug!(
-                    "Scratchpad '{}' window {} is not floating, focusing directly",
+                    "Scratchpad '{}' window {} is tiled, handling focus toggle",
                     name, window_id
                 );
+                let state = self.states.get_mut(name).unwrap();
+
+                // Check if the scratchpad window is currently focused
+                if let Ok(current) = window_utils::get_focused_window(&self.niri).await {
+                    if current.id == window_id {
+                        // Window is already focused, try refocus if enabled
+                        if config.refocus
+                            && window_utils::try_refocus_to_previous(
+                                &self.niri,
+                                window_id,
+                                &mut state.previous_focused_window,
+                            )
+                            .await?
+                        {
+                            return Ok(());
+                        }
+                        // Already focused and refocus not enabled or failed, do nothing
+                        return Ok(());
+                    } else {
+                        // Window is not focused, save current focus and focus the scratchpad
+                        debug!(
+                            "Saving previous window {} before focusing scratchpad",
+                            current.id
+                        );
+                        state.previous_focused_window = Some(current.id);
+                    }
+                } else {
+                    // No focused window, clear previous
+                    state.previous_focused_window = None;
+                }
+
                 window_utils::focus_window(self.niri.clone(), window_id).await?;
                 return Ok(());
             }
@@ -406,7 +444,7 @@ impl ScratchpadManager {
 
         let state = self.states.get_mut(name).unwrap();
 
-        // 4. Determine next state
+        // 4. Determine next state (for floating windows)
         if state.is_visible {
             let (current_workspace, windows) =
                 window_utils::get_workspace_and_windows(&self.niri).await?;
@@ -415,6 +453,7 @@ impl ScratchpadManager {
             });
 
             if in_current_workspace {
+                // Floating window: just hide it (no refocus for floating)
                 state.is_visible = false;
             } else {
                 // Already visible but elsewhere, re-record focus and it will be moved in sync_state
@@ -470,6 +509,7 @@ impl ScratchpadManager {
             swallow_to_focus,
             sticky: false,
             auto_hide_on_focus_loss: false,
+            refocus: false,
         };
 
         self.setup_window(window.id, &config).await?;

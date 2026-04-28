@@ -65,20 +65,16 @@ impl MarkPlugin {
                 .copied()
                 .context("internal: mark disappeared after existence check")?;
 
-            // Try to get current focused window (may fail on empty workspace)
-            if let Ok(current) = get_focused_window(&self.niri).await {
-                if self.refocus && current.id == id {
-                    if let Some(prev_id) = self.previous_window {
-                        if window_utils::window_exists(&self.niri, prev_id).await? {
-                            debug!("Refocusing to previous window {}", prev_id);
-                            // Swap: set previous to current marked window for next toggle
-                            self.previous_window = Some(id);
-                            window_utils::focus_window(self.niri.clone(), prev_id).await?;
-                            return Ok(());
-                        }
-                    }
-                }
+            // Try refocus first if enabled
+            if self.refocus
+                && window_utils::try_refocus_to_previous(&self.niri, id, &mut self.previous_window)
+                    .await?
+            {
+                return Ok(());
+            }
 
+            // If refocus didn't happen, save current window as previous and focus the mark window
+            if let Ok(current) = get_focused_window(&self.niri).await {
                 debug!("Saving previous window {} before focusing mark", current.id);
                 self.previous_window = Some(current.id);
             } else {
