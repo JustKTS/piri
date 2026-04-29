@@ -72,7 +72,7 @@ impl WindowOrderPlugin {
 
     /// Check if window ordering should be applied to the given workspace
     /// Returns true if workspaces list is empty (apply to all) or if workspace matches
-    fn should_apply_to_workspace(workspace_name: &str, workspaces: Vec<String>) -> bool {
+    fn should_apply_to_workspace(workspace_name: &str, workspaces: &[String]) -> bool {
         debug!(
             "Checking if window ordering should apply to workspace '{}', configured workspaces: {:?}",
             workspace_name, workspaces
@@ -541,8 +541,7 @@ impl crate::plugins::Plugin for WindowOrderPlugin {
 
         let current_workspace = self.niri.get_focused_workspace().await?;
 
-        if !Self::should_apply_to_workspace(&current_workspace.name, self.config.workspaces.clone())
-        {
+        if !Self::should_apply_to_workspace(&current_workspace.name, &self.config.workspaces) {
             return Ok(());
         }
 

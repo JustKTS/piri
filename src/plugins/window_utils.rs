@@ -37,9 +37,14 @@ pub fn unregister_sticky_window(window_id: u64) {
     debug!("Sticky registry: unregistered window {}", window_id);
 }
 
-/// Snapshot of all registered sticky windows.
-pub fn get_sticky_windows() -> HashMap<u64, bool> {
-    sticky_registry().lock().unwrap().clone()
+/// Snapshot of all registered sticky windows as (window_id, cross_monitor) pairs.
+pub fn get_sticky_window_list() -> Vec<(u64, bool)> {
+    sticky_registry()
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|(&id, &cross)| (id, cross))
+        .collect()
 }
 
 use crate::config::Direction;
@@ -48,25 +53,25 @@ use crate::niri::Window;
 
 /// Shared state to track programmatic focus changes (e.g., from auto_fill)
 /// This prevents window_rule from executing focus_command during programmatic operations
-static PROGRAMMATIC_FOCUS_TIME: OnceLock<Arc<Mutex<Option<Instant>>>> = OnceLock::new();
+static PROGRAMMATIC_FOCUS_TIME: OnceLock<StdMutex<Option<Instant>>> = OnceLock::new();
 
-fn get_programmatic_focus_time() -> Arc<Mutex<Option<Instant>>> {
-    PROGRAMMATIC_FOCUS_TIME.get_or_init(|| Arc::new(Mutex::new(None))).clone()
+fn get_programmatic_focus_time() -> &'static StdMutex<Option<Instant>> {
+    PROGRAMMATIC_FOCUS_TIME.get_or_init(|| StdMutex::new(None))
 }
 
 /// Mark that a programmatic focus change is starting
 /// Focus changes within PROGRAMMATIC_FOCUS_WINDOW_MS will be ignored by window_rule
-pub async fn mark_programmatic_focus_start() {
+pub fn mark_programmatic_focus_start() {
     let time = get_programmatic_focus_time();
-    let mut guard = time.lock().await;
+    let mut guard = time.lock().unwrap();
     *guard = Some(Instant::now());
 }
 
 /// Check if a focus change should be ignored (happened during programmatic operation)
-pub async fn should_ignore_focus_change() -> bool {
+pub fn should_ignore_focus_change() -> bool {
     const PROGRAMMATIC_FOCUS_WINDOW_MS: u64 = 500;
     let time = get_programmatic_focus_time();
-    let guard = time.lock().await;
+    let guard = time.lock().unwrap();
     if let Some(start_time) = *guard {
         if start_time.elapsed().as_millis() < PROGRAMMATIC_FOCUS_WINDOW_MS as u128 {
             return true;
@@ -148,10 +153,27 @@ pub async fn get_focused_window(niri: &NiriIpc) -> Result<Window> {
         .ok_or_else(|| anyhow::anyhow!("Window {} not found", window_id))
 }
 
+/// Get focused window from a pre-fetched window list (avoids redundant IPC call).
+/// Falls back to IPC only for the focused window ID.
+pub async fn get_focused_window_from_cache(niri: &NiriIpc, windows: &[Window]) -> Result<Window> {
+    let focused_window_id = niri.get_focused_window_id().await?;
+    let window_id = focused_window_id.ok_or_else(|| anyhow::anyhow!("No focused window found"))?;
+    windows
+        .iter()
+        .find(|w| w.id == window_id)
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("Window {} not found", window_id))
+}
+
 /// Check if a window exists by window_id
 pub async fn window_exists(niri: &NiriIpc, window_id: u64) -> Result<bool> {
-    let windows = niri.get_windows().await?;
+    let windows = niri.get_windows_raw().await?;
     Ok(windows.iter().any(|w| w.id == window_id))
+}
+
+/// Check if a window exists in a pre-fetched list (avoids redundant IPC call).
+pub fn window_exists_in_cache(windows: &[Window], window_id: u64) -> bool {
+    windows.iter().any(|w| w.id == window_id)
 }
 
 /// Wait for a window to appear matching the given pattern
@@ -169,7 +191,8 @@ pub async fn wait_for_window(
         regex::escape(window_match)
     };
 
-    let matcher = WindowMatcher::new(Some(vec![pattern]), None);
+    let patterns = vec![pattern];
+    let matcher = WindowMatcher::new(Some(&patterns), None);
 
     for attempt in 1..=max_attempts {
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -188,7 +211,7 @@ pub async fn wait_for_window(
 
     // Timeout: Log all available windows to help debug matching issues
     warn!("Timeout waiting for {} (pattern: '{}')", name, window_match);
-    if let Ok(windows) = niri.get_windows().await {
+    if let Ok(windows) = niri.get_windows_raw().await {
         debug!("Available windows at timeout:");
         for window in windows {
             debug!(
@@ -207,43 +230,52 @@ pub async fn wait_for_window(
 
 /// Window matcher configuration for matching windows by app_id and/or title
 #[derive(Debug, Clone)]
-pub struct WindowMatcher {
+pub struct WindowMatcher<'a> {
     /// Optional regex patterns to match app_id (any one matches)
-    pub app_id: Option<Vec<String>>,
+    pub app_id: Option<&'a [String]>,
     /// Optional regex patterns to match title (any one matches)
-    pub title: Option<Vec<String>>,
+    pub title: Option<&'a [String]>,
 }
 
-impl WindowMatcher {
+impl<'a> WindowMatcher<'a> {
     /// Create a new window matcher
-    pub fn new(app_id: Option<Vec<String>>, title: Option<Vec<String>>) -> Self {
+    pub fn new(app_id: Option<&'a [String]>, title: Option<&'a [String]>) -> Self {
         Self { app_id, title }
     }
 }
 
 /// Window matcher with regex cache for efficient pattern matching
 pub struct WindowMatcherCache {
-    regex_cache: Arc<Mutex<HashMap<String, Regex>>>,
+    regex_cache: Arc<StdMutex<HashMap<String, Arc<Regex>>>>,
 }
 
 impl WindowMatcherCache {
     /// Create a new window matcher cache
     pub fn new() -> Self {
         Self {
-            regex_cache: Arc::new(Mutex::new(HashMap::new())),
+            regex_cache: Arc::new(StdMutex::new(HashMap::new())),
         }
     }
 
     /// Get or compile a regex pattern (with caching)
-    async fn get_regex(&self, pattern: &str) -> Result<Regex> {
-        let mut cache = self.regex_cache.lock().await;
-        if let Some(regex) = cache.get(pattern) {
-            return Ok(regex.clone());
+    fn get_regex(&self, pattern: &str) -> Result<Arc<Regex>> {
+        {
+            let cache = self.regex_cache.lock().unwrap();
+            if let Some(regex) = cache.get(pattern) {
+                return Ok(Arc::clone(regex));
+            }
         }
-
-        let regex = Regex::new(pattern)
-            .with_context(|| format!("Failed to compile regex pattern: {}", pattern))?;
-        cache.insert(pattern.to_string(), regex.clone());
+        // Drop the lock before compiling (potentially slow)
+        let regex = Arc::new(
+            Regex::new(pattern)
+                .with_context(|| format!("Failed to compile regex pattern: {}", pattern))?,
+        );
+        let mut cache = self.regex_cache.lock().unwrap();
+        // Double-check after re-acquiring lock (another thread may have inserted)
+        if let Some(existing) = cache.get(pattern) {
+            return Ok(Arc::clone(existing));
+        }
+        cache.insert(pattern.to_string(), Arc::clone(&regex));
         Ok(regex)
     }
 
@@ -253,17 +285,17 @@ impl WindowMatcherCache {
     /// - Any title pattern matches (if specified)
     /// - If both are specified, match if either matches (OR logic)
     /// - If only one is specified, it must match
-    pub async fn matches(
+    pub fn matches(
         &self,
         window_app_id: Option<&String>,
         window_title: Option<&String>,
-        matcher: &WindowMatcher,
+        matcher: &WindowMatcher<'_>,
     ) -> Result<bool> {
         // Check app_id match (if specified) - any pattern in the list matches
-        if let Some(ref app_id_patterns) = matcher.app_id {
+        if let Some(app_id_patterns) = matcher.app_id {
             if let Some(window_app_id) = window_app_id {
                 for pattern in app_id_patterns {
-                    let regex = self.get_regex(pattern).await?;
+                    let regex = self.get_regex(pattern)?;
                     if regex.is_match(window_app_id) {
                         return Ok(true);
                     }
@@ -272,10 +304,10 @@ impl WindowMatcherCache {
         }
 
         // Check title match (if specified) - any pattern in the list matches
-        if let Some(ref title_patterns) = matcher.title {
+        if let Some(title_patterns) = matcher.title {
             if let Some(window_title) = window_title {
                 for pattern in title_patterns {
-                    let regex = self.get_regex(pattern).await?;
+                    let regex = self.get_regex(pattern)?;
                     if regex.is_match(window_title) {
                         return Ok(true);
                     }
@@ -289,8 +321,8 @@ impl WindowMatcherCache {
     }
 
     /// Clear the regex cache (useful when config changes)
-    pub async fn clear_cache(&self) {
-        let mut cache = self.regex_cache.lock().await;
+    pub fn clear_cache(&self) {
+        let mut cache = self.regex_cache.lock().unwrap();
         cache.clear();
     }
 }
@@ -305,15 +337,14 @@ impl Default for WindowMatcherCache {
 /// This is the unified method for finding windows by app_id and/or title
 pub async fn find_window_by_matcher(
     niri: NiriIpc,
-    matcher: &WindowMatcher,
+    matcher: &WindowMatcher<'_>,
     matcher_cache: &WindowMatcherCache,
 ) -> Result<Option<Window>> {
-    let windows = niri.get_windows().await?;
+    let windows = niri.get_windows_raw().await?;
 
     for window in windows {
-        let matches = matcher_cache
-            .matches(window.app_id.as_ref(), Some(&window.title), matcher)
-            .await?;
+        let matches =
+            matcher_cache.matches(window.app_id.as_ref(), Some(&window.title), matcher)?;
 
         if matches {
             return Ok(Some(window));
@@ -332,7 +363,7 @@ pub async fn get_focused_workspace_from_event(
 }
 
 pub async fn is_workspace_empty(niri: &NiriIpc, workspace_id: u64) -> Result<bool> {
-    let windows = niri.get_windows().await?;
+    let windows = niri.get_windows_raw().await?;
     let workspace_windows: Vec<_> =
         windows.iter().filter(|w| w.workspace_id == Some(workspace_id)).collect();
     Ok(workspace_windows.is_empty())
@@ -588,7 +619,7 @@ pub async fn sticky_follow_workspace(
     window_id: u64,
     cross_monitor: bool,
 ) -> Result<StickyFollowResult> {
-    let windows = niri.get_windows().await?;
+    let windows = niri.get_windows_raw().await?;
     let window = match windows.iter().find(|w| w.id == window_id) {
         Some(w) => w,
         None => {
@@ -664,7 +695,7 @@ pub async fn sticky_follow_workspace(
 
 /// Check if a window matches the given matcher (with optional exclude patterns)
 /// This is a generic window matching function that supports both include and exclude patterns
-pub async fn matches_window(
+pub fn matches_window(
     window: &Window,
     app_id_patterns: Option<&Vec<String>>,
     title_patterns: Option<&Vec<String>>,
@@ -674,29 +705,23 @@ pub async fn matches_window(
 ) -> Result<bool> {
     // First check exclude rules
     if let Some(exclude_patterns) = exclude_app_id_patterns {
-        let exclude_matcher = WindowMatcher::new(Some(exclude_patterns.clone()), None);
-        if matcher_cache
-            .matches(
-                window.app_id.as_ref(),
-                Some(&window.title),
-                &exclude_matcher,
-            )
-            .await?
-        {
+        let exclude_matcher = WindowMatcher::new(Some(exclude_patterns.as_slice()), None);
+        if matcher_cache.matches(
+            window.app_id.as_ref(),
+            Some(&window.title),
+            &exclude_matcher,
+        )? {
             return Ok(false);
         }
     }
 
     if let Some(exclude_patterns) = exclude_title_patterns {
-        let exclude_matcher = WindowMatcher::new(None, Some(exclude_patterns.clone()));
-        if matcher_cache
-            .matches(
-                window.app_id.as_ref(),
-                Some(&window.title),
-                &exclude_matcher,
-            )
-            .await?
-        {
+        let exclude_matcher = WindowMatcher::new(None, Some(exclude_patterns.as_slice()));
+        if matcher_cache.matches(
+            window.app_id.as_ref(),
+            Some(&window.title),
+            &exclude_matcher,
+        )? {
             return Ok(false);
         }
     }
@@ -707,10 +732,11 @@ pub async fn matches_window(
     }
 
     // Check include patterns
-    let matcher = WindowMatcher::new(app_id_patterns.cloned(), title_patterns.cloned());
-    matcher_cache
-        .matches(window.app_id.as_ref(), Some(&window.title), &matcher)
-        .await
+    let matcher = WindowMatcher::new(
+        app_id_patterns.map(|v| v.as_slice()),
+        title_patterns.map(|v| v.as_slice()),
+    );
+    matcher_cache.matches(window.app_id.as_ref(), Some(&window.title), &matcher)
 }
 
 /// Try to find parent window using PID-based matching.
@@ -737,74 +763,86 @@ pub async fn try_pid_matching(
         child_window.id, child_window.app_id, child_window.title, child_pid
     );
 
-    // Build ancestor process tree set for O(1) lookup
-    let mut ancestor_pids = HashSet::new();
-    let mut current_pid = child_pid;
-    let mut ancestor_list = Vec::new();
+    // Build ancestor process tree using blocking I/O in a dedicated thread.
+    // /proc reads are fast but should not block the async runtime.
+    let ancestor_pids: HashSet<u32> = tokio::task::spawn_blocking(move || {
+        let mut ancestor_pids = HashSet::new();
+        let mut current_pid = child_pid;
 
-    loop {
-        let stat_path = format!("/proc/{}/stat", current_pid);
-        let stat = match tokio::fs::read_to_string(&stat_path).await {
-            Ok(stat) => stat,
-            Err(_) => break,
-        };
+        loop {
+            let stat_path = format!("/proc/{}/stat", current_pid);
+            let stat = match std::fs::read_to_string(&stat_path) {
+                Ok(s) => s,
+                Err(_) => break,
+            };
 
-        let fields: Vec<&str> = stat.split_whitespace().collect();
-        if fields.len() < 4 {
-            break;
+            let fields: Vec<&str> = stat.split_whitespace().collect();
+            if fields.len() < 4 {
+                break;
+            }
+
+            let p_pid = match fields[3].parse::<u32>() {
+                Ok(pid) => pid,
+                Err(_) => break,
+            };
+
+            if p_pid == 0 || p_pid == 1 {
+                break;
+            }
+
+            ancestor_pids.insert(p_pid);
+            current_pid = p_pid;
         }
 
-        let p_pid = match fields[3].parse::<u32>() {
-            Ok(pid) => pid,
-            Err(_) => break,
-        };
+        ancestor_pids
+    })
+    .await
+    .unwrap_or_default();
 
-        if p_pid == 0 || p_pid == 1 {
-            break;
-        }
-
-        ancestor_pids.insert(p_pid);
-        ancestor_list.push(p_pid);
-        current_pid = p_pid;
-    }
-
-    if !ancestor_list.is_empty() {
-        let mut log_parts = Vec::new();
-        for &pid in &ancestor_list {
-            let comm = tokio::fs::read_to_string(format!("/proc/{}/comm", pid))
-                .await
-                .map(|s| s.trim().to_string())
-                .unwrap_or_else(|_| "unknown".to_string());
-            log_parts.push(format!("{} ({})", pid, comm));
-        }
+    if log::log_enabled!(log::Level::Debug) && !ancestor_pids.is_empty() {
+        let pids = ancestor_pids.clone();
+        let child_id = child_window.id;
+        let log_parts: Vec<String> = tokio::task::spawn_blocking(move || {
+            pids.iter()
+                .map(|&pid| {
+                    let comm = std::fs::read_to_string(format!("/proc/{}/comm", pid))
+                        .map(|s| s.trim().to_string())
+                        .unwrap_or_else(|_| "unknown".to_string());
+                    format!("{} ({})", pid, comm)
+                })
+                .collect()
+        })
+        .await
+        .unwrap_or_default();
         debug!(
             "Process tree PIDs for child {}: {}",
-            child_window.id,
+            child_id,
             log_parts.join(" -> ")
         );
     }
 
     // Search for parent window whose PID is in the ancestor tree
-    for window in windows {
-        if window.id == child_window.id {
-            continue;
-        }
+    // Batch all pid_map updates into a single lock acquisition
+    {
+        let mut map = window_pid_map.lock().await;
+        for window in windows {
+            if window.id == child_window.id {
+                continue;
+            }
 
-        let Some(window_pid) = window.pid else {
-            continue;
-        };
+            let Some(window_pid) = window.pid else {
+                continue;
+            };
 
-        {
-            let mut map = window_pid_map.lock().await;
             map.entry(window_pid).or_insert_with(Vec::new).push(window.id);
-        }
 
-        if ancestor_pids.contains(&window_pid) {
-            debug!(
-                "Found parent window {} (app_id={:?}, title={}) in process tree (PID: {})",
-                window.id, window.app_id, window.title, window_pid
-            );
-            return Ok(Some(window.clone()));
+            if ancestor_pids.contains(&window_pid) {
+                debug!(
+                    "Found parent window {} (app_id={:?}, title={}) in process tree (PID: {})",
+                    window.id, window.app_id, window.title, window_pid
+                );
+                return Ok(Some(window.clone()));
+            }
         }
     }
 

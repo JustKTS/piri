@@ -4,8 +4,7 @@ use log::{debug, info, warn};
 use niri_ipc::{Action, Event, Reply, Request, SizeChange};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
-use tokio::sync::Mutex;
+use std::sync::{Arc, Mutex as StdMutex};
 use tokio::time::Duration;
 
 use crate::config::{Config, EdgePulseConfig, WorkspaceRuleConfig, WorkspaceRuleSection};
@@ -17,11 +16,11 @@ use crate::utils::Throttle;
 use niri_ipc::ColumnDisplay;
 
 struct AutofillGuard {
-    flag: Arc<Mutex<bool>>,
+    flag: Arc<StdMutex<bool>>,
 }
 
 impl AutofillGuard {
-    fn new(flag: Arc<Mutex<bool>>) -> Self {
+    fn new(flag: Arc<StdMutex<bool>>) -> Self {
         Self { flag }
     }
 }
@@ -72,8 +71,8 @@ pub struct WorkspaceRulePlugin {
     previous_layouts: HashMap<u64, niri_ipc::WindowLayout>,
     window_floating_state: HashMap<u64, bool>,
     maximized_windows: HashSet<u64>,
-    apply_widths_throttle: Arc<Mutex<Throttle>>,
-    autofill_executing: Arc<Mutex<bool>>,
+    apply_widths_throttle: Arc<StdMutex<Throttle>>,
+    autofill_executing: Arc<StdMutex<bool>>,
     edge_pulse_last_render: Option<EdgePulseRenderState>,
     edge_pulse_renderer: EdgePulseRenderer,
 }
@@ -127,7 +126,7 @@ impl WorkspaceRulePlugin {
         }
 
         {
-            let mut executing = self.autofill_executing.lock().await;
+            let mut executing = self.autofill_executing.lock().unwrap_or_else(|e| e.into_inner());
             if *executing {
                 debug!("Autofill ignored: already executing");
                 return Ok(());
@@ -254,7 +253,7 @@ impl WorkspaceRulePlugin {
             return Ok(());
         };
 
-        let windows = self.niri.get_windows().await?;
+        let windows = self.niri.get_windows_raw().await?;
         let columns = Self::collect_workspace_columns_by_id(&windows, ws_id);
 
         // Single column — no edge indicators needed
@@ -555,7 +554,7 @@ impl WorkspaceRulePlugin {
     async fn check_and_align_last_column(&self) -> Result<()> {
         debug!("Autofill: aligning columns in current workspace");
 
-        crate::plugins::window_utils::mark_programmatic_focus_start().await;
+        crate::plugins::window_utils::mark_programmatic_focus_start();
 
         let _guard = AutofillGuard::new(Arc::clone(&self.autofill_executing));
 
@@ -585,7 +584,7 @@ impl WorkspaceRulePlugin {
         let should_run = self
             .apply_widths_throttle
             .lock()
-            .await
+            .unwrap_or_else(|e| e.into_inner())
             .check_and_update_no_reset(Duration::from_millis(200));
 
         if should_run {
@@ -623,7 +622,7 @@ impl WorkspaceRulePlugin {
         }
 
         if is_new_tiled {
-            let windows = self.niri.get_windows().await?;
+            let windows = self.niri.get_windows_raw().await?;
             if let Some(full_window) = windows.iter().find(|w| w.id == window.id) {
                 self.handle_auto_tile(full_window)
                     .await
@@ -677,8 +676,8 @@ impl crate::plugins::Plugin for WorkspaceRulePlugin {
             previous_layouts: HashMap::new(),
             window_floating_state: HashMap::new(),
             maximized_windows: HashSet::new(),
-            apply_widths_throttle: Arc::new(Mutex::new(Throttle::new())),
-            autofill_executing: Arc::new(Mutex::new(false)),
+            apply_widths_throttle: Arc::new(StdMutex::new(Throttle::new())),
+            autofill_executing: Arc::new(StdMutex::new(false)),
             edge_pulse_last_render: None,
             edge_pulse_renderer: EdgePulseRenderer::new(),
         }

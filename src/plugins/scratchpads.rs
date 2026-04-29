@@ -167,7 +167,7 @@ impl ScratchpadManager {
                 );
                 let child_window = self
                     .niri
-                    .get_windows()
+                    .get_windows_raw()
                     .await?
                     .into_iter()
                     .find(|w| w.id == window_id)
@@ -310,7 +310,9 @@ impl ScratchpadManager {
         let state = self.states.get_mut(name).context("State not found")?;
 
         if let Some(window_id) = state.window_id {
-            if window_utils::window_exists(&self.niri, window_id).await? {
+            // Fetch windows once and reuse for existence check
+            let windows = self.niri.get_windows_raw().await?;
+            if window_utils::window_exists_in_cache(&windows, window_id) {
                 return Ok(window_id);
             }
             debug!(
@@ -330,7 +332,8 @@ impl ScratchpadManager {
 
         info!("Finding or launching window for scratchpad {}", name);
         let config = state.config.clone();
-        let matcher = WindowMatcher::new(Some(vec![config.app_id.clone()]), None);
+        let patterns = vec![config.app_id.clone()];
+        let matcher = WindowMatcher::new(Some(&patterns), None);
 
         let window_id = if let Some(window) =
             window_utils::find_window_by_matcher(self.niri.clone(), &matcher, &self.matcher_cache)
@@ -391,7 +394,8 @@ impl ScratchpadManager {
         let config = self.states.get(name).map(|s| s.config.clone()).context("State not found")?;
 
         // 3. Check if window is floating, if not, handle as tiled window
-        if let Some(window) = self.niri.get_windows().await?.into_iter().find(|w| w.id == window_id)
+        if let Some(window) =
+            self.niri.get_windows_raw().await?.into_iter().find(|w| w.id == window_id)
         {
             debug!(
                 "Scratchpad '{}' window {} floating status: {}",
@@ -537,7 +541,7 @@ impl ScratchpadManager {
         move_to_workspace: Option<String>,
     ) -> Result<()> {
         // Get list of windows to check floating status
-        let windows = self.niri.get_windows().await?;
+        let windows = self.niri.get_windows_raw().await?;
 
         let names_to_hide: Vec<String> = self
             .states
@@ -630,7 +634,7 @@ impl crate::plugins::Plugin for ScratchpadsPlugin {
         self.config = config;
 
         // Clear matcher cache to reflect potential regex changes in config
-        self.manager.matcher_cache.clear_cache().await;
+        self.manager.matcher_cache.clear_cache();
 
         Ok(())
     }

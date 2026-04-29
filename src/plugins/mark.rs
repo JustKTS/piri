@@ -53,10 +53,14 @@ impl MarkPlugin {
 
     /// If `name` points to a live window, focus it; otherwise store the current focus under `name`.
     async fn toggle(&mut self, name: &str) -> Result<()> {
-        let focus_existing = match self.marks.get(name).copied() {
-            Some(id) => window_utils::window_exists(&self.niri, id).await?,
-            None => false,
-        };
+        // Fetch windows once for both existence check and focused window lookup
+        let windows = self.niri.get_windows_raw().await?;
+        let focus_existing = self
+            .marks
+            .get(name)
+            .copied()
+            .map(|id| window_utils::window_exists_in_cache(&windows, id))
+            .unwrap_or(false);
 
         if focus_existing {
             let id = self
@@ -74,7 +78,9 @@ impl MarkPlugin {
             }
 
             // If refocus didn't happen, save current window as previous and focus the mark window
-            if let Ok(current) = get_focused_window(&self.niri).await {
+            if let Ok(current) =
+                window_utils::get_focused_window_from_cache(&self.niri, &windows).await
+            {
                 debug!("Saving previous window {} before focusing mark", current.id);
                 self.previous_window = Some(current.id);
             } else {

@@ -86,7 +86,7 @@ impl WindowRulePlugin {
     /// Handle focus command execution for currently focused window
     async fn handle_focus_command(&mut self, window_id: u64) -> Result<()> {
         // Check if this is a programmatic focus change (e.g., from auto_fill)
-        if window_utils::should_ignore_focus_change().await {
+        if window_utils::should_ignore_focus_change() {
             debug!(
                 "Ignoring programmatic focus change for window {}",
                 window_id
@@ -112,62 +112,67 @@ impl WindowRulePlugin {
             }
         };
 
-        let rules = self.config.rules.clone();
-        for (rule_index, rule) in rules.iter().enumerate() {
-            if let Some(ref focus_command) = rule.focus_command {
-                let matcher = WindowMatcher::new(rule.app_id.clone(), rule.title.clone());
-                if self
-                    .matcher_cache
-                    .matches(window.app_id.as_ref(), Some(&window.title), &matcher)
-                    .await?
-                {
-                    self.execute_focus_rule(
-                        window_id,
-                        focus_command,
-                        rule_index,
-                        rule.focus_command_once,
-                    )
-                    .await?;
-                    return Ok(());
+        // Find matching rule without holding borrows on self
+        let matched_rule = {
+            let mut found = None;
+            for (rule_index, rule) in self.config.rules.iter().enumerate() {
+                if let Some(ref focus_command) = rule.focus_command {
+                    let matcher = WindowMatcher::new(rule.app_id.as_deref(), rule.title.as_deref());
+                    if self.matcher_cache.matches(
+                        window.app_id.as_ref(),
+                        Some(&window.title),
+                        &matcher,
+                    )? {
+                        found = Some((rule_index, focus_command.clone(), rule.focus_command_once));
+                        break;
+                    }
                 }
             }
+            found
+        };
+
+        if let Some((rule_index, focus_command, focus_once)) = matched_rule {
+            self.execute_focus_rule(window_id, &focus_command, rule_index, focus_once)
+                .await?;
         }
 
         Ok(())
     }
 
     async fn handle_window_opened(&mut self, window: &niri_ipc::Window) -> Result<()> {
-        let rules = self.config.rules.clone();
-        for (rule_index, rule) in rules.iter().enumerate() {
-            let matcher = WindowMatcher::new(rule.app_id.clone(), rule.title.clone());
-            if self
-                .matcher_cache
-                .matches(window.app_id.as_ref(), window.title.as_ref(), &matcher)
-                .await?
-            {
-                // 1. Move to workspace if specified
-                if let Some(ref workspace_name) = rule.open_on_workspace {
-                    window_utils::move_window_to_named_workspace(
-                        &self.niri,
-                        window,
-                        workspace_name,
-                    )
-                    .await?;
-                }
-
-                // 2. Execute focus command if specified (unified de-duplication)
-                if let Some(ref focus_command) = rule.focus_command {
-                    self.execute_focus_rule(
-                        window.id,
-                        focus_command,
+        // Find matching rule without holding borrows on self
+        let matched_rule = {
+            let mut found = None;
+            for (rule_index, rule) in self.config.rules.iter().enumerate() {
+                let matcher = WindowMatcher::new(rule.app_id.as_deref(), rule.title.as_deref());
+                if self.matcher_cache.matches(
+                    window.app_id.as_ref(),
+                    window.title.as_ref(),
+                    &matcher,
+                )? {
+                    found = Some((
                         rule_index,
+                        rule.open_on_workspace.clone(),
+                        rule.focus_command.clone(),
                         rule.focus_command_once,
-                    )
-                    .await?;
+                    ));
+                    break;
                 }
+            }
+            found
+        };
 
-                // Only apply the first matching rule
-                break;
+        if let Some((rule_index, open_on_workspace, focus_command, focus_once)) = matched_rule {
+            // 1. Move to workspace if specified
+            if let Some(ref workspace_name) = open_on_workspace {
+                window_utils::move_window_to_named_workspace(&self.niri, window, workspace_name)
+                    .await?;
+            }
+
+            // 2. Execute focus command if specified (unified de-duplication)
+            if let Some(ref focus_command) = focus_command {
+                self.execute_focus_rule(window.id, focus_command, rule_index, focus_once)
+                    .await?;
             }
         }
         Ok(())
@@ -224,7 +229,7 @@ impl crate::plugins::Plugin for WindowRulePlugin {
             config.rules.len()
         );
         self.config = config;
-        self.matcher_cache.clear_cache().await;
+        self.matcher_cache.clear_cache();
         // Clear executed rules tracking since rule indices may have changed
         self.executed_rules.clear();
         Ok(())

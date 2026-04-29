@@ -111,7 +111,7 @@ impl SwallowPlugin {
         window_pid_map: Arc<Mutex<HashMap<u32, Vec<u64>>>>,
     ) -> Result<()> {
         debug!("Performing initial window scan for swallow plugin");
-        let windows = niri.get_windows().await?;
+        let windows = niri.get_windows_raw().await?;
         let mut map = window_pid_map.lock().await;
         for window in windows {
             match window.pid {
@@ -147,7 +147,6 @@ impl SwallowPlugin {
             None,
             &self.matcher_cache,
         )
-        .await
     }
 
     /// Check if a child window matches a rule's child window conditions
@@ -188,8 +187,7 @@ impl SwallowPlugin {
             None,
             None,
             &self.matcher_cache,
-        )
-        .await?;
+        )?;
 
         if !matches_window_criteria {
             return Ok(false);
@@ -236,7 +234,7 @@ impl SwallowPlugin {
                 child_window_id, self.focused_window_queue.len()
             );
             // Search queue from newest to oldest, find first window that matches parent rule
-            let windows = self.niri.get_windows().await?;
+            let windows = self.niri.get_windows_raw().await?;
             for &prev_focused_id in self.focused_window_queue.iter().rev() {
                 // Skip child window itself
                 if prev_focused_id == child_window_id {
@@ -266,8 +264,7 @@ impl SwallowPlugin {
                     None,
                     None,
                     &self.matcher_cache,
-                )
-                .await?;
+                )?;
 
                 if !matches_window_criteria {
                     debug!(
@@ -311,8 +308,7 @@ impl SwallowPlugin {
             None,
             None,
             &self.matcher_cache,
-        )
-        .await?;
+        )?;
 
         if !matches_window_criteria {
             warn!(
@@ -395,7 +391,7 @@ impl SwallowPlugin {
 
         // Priority 1: Try PID matching first (if enabled)
         if self.config.use_pid_matching {
-            let windows = self.niri.get_windows().await?;
+            let windows = self.niri.get_windows_raw().await?;
             if let Some(parent_window) =
                 try_pid_matching(&child_window, &windows, self.window_pid_map.clone()).await?
             {

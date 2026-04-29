@@ -69,7 +69,9 @@ impl SingletonManager {
         let state = self.states.get_mut(name).context("Singleton state not found")?;
 
         if let Some(window_id) = state.window_id {
-            if window_utils::window_exists(&self.niri, window_id).await? {
+            // Use a targeted check instead of fetching all windows
+            if window_utils::window_exists_in_cache(&self.niri.get_windows_raw().await?, window_id)
+            {
                 return Ok(window_id);
             }
             debug!(
@@ -81,7 +83,8 @@ impl SingletonManager {
 
         let config = state.config.clone();
         let window_match = Self::get_window_match_pattern(&config);
-        let matcher = WindowMatcher::new(Some(vec![window_match.clone()]), None);
+        let patterns = vec![window_match.clone()];
+        let matcher = WindowMatcher::new(Some(&patterns), None);
 
         let window_id = if let Some(window) =
             window_utils::find_window_by_matcher(self.niri.clone(), &matcher, &self.matcher_cache)
@@ -130,8 +133,8 @@ impl SingletonManager {
         Ok(())
     }
 
-    async fn clear_cache(&self) {
-        self.matcher_cache.clear_cache().await;
+    fn clear_cache(&self) {
+        self.matcher_cache.clear_cache();
     }
 }
 
@@ -183,7 +186,7 @@ impl crate::plugins::Plugin for SingletonPlugin {
         self.manager.states.retain(|name, _| config.singletons.contains_key(name));
 
         self.config = config;
-        self.manager.clear_cache().await;
+        self.manager.clear_cache();
 
         Ok(())
     }

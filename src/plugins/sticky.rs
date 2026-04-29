@@ -47,7 +47,7 @@ impl StickyPlugin {
 
     /// Follow the focused workspace for all registered sticky windows.
     async fn follow_focused_workspace(&self) -> Result<()> {
-        let windows = window_utils::get_sticky_windows();
+        let windows = window_utils::get_sticky_window_list();
         for (window_id, cross_monitor) in windows {
             // Get window position/size before the move (for proportional resize)
             let pre_move = self.niri.get_window_position_async(window_id).await?;

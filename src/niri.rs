@@ -97,7 +97,7 @@ impl NiriIpc {
     /// Update socket path and clear existing connection if it changed
     pub fn update_socket_path(&self, socket_path: Option<String>) {
         let new_path = socket_path.map(PathBuf::from);
-        let mut path_guard = self.inner.socket_path.lock().unwrap();
+        let mut path_guard = self.inner.socket_path.lock().unwrap_or_else(|e| e.into_inner());
         if *path_guard != new_path {
             log::info!(
                 "Niri socket path changed: {:?} -> {:?}",
@@ -105,16 +105,14 @@ impl NiriIpc {
                 new_path
             );
             *path_guard = new_path;
-            if let Ok(mut socket_guard) = self.inner.socket.lock() {
-                *socket_guard = None;
-            }
+            let mut socket_guard = self.inner.socket.lock().unwrap_or_else(|e| e.into_inner());
+            *socket_guard = None;
         }
     }
 
     /// Connect to niri socket
     fn connect_internal(&self) -> Result<Socket> {
-        let path_guard =
-            self.inner.socket_path.lock().map_err(|_| anyhow::anyhow!("Mutex poisoned"))?;
+        let path_guard = self.inner.socket_path.lock().unwrap_or_else(|e| e.into_inner());
         let socket = if let Some(ref path) = *path_guard {
             Socket::connect_to(path).context("Failed to connect to niri socket")?
         } else {
@@ -127,8 +125,7 @@ impl NiriIpc {
     pub async fn send_request(&self, request: Request) -> Result<Response> {
         let niri = self.clone();
         tokio::task::spawn_blocking(move || -> Result<Response> {
-            let mut guard =
-                niri.inner.socket.lock().map_err(|_| anyhow::anyhow!("Mutex poisoned"))?;
+            let mut guard = niri.inner.socket.lock().unwrap_or_else(|e| e.into_inner());
             if guard.is_none() {
                 *guard = Some(niri.connect_internal()?);
             }
@@ -169,8 +166,7 @@ impl NiriIpc {
     {
         let niri = self.clone();
         tokio::task::spawn_blocking(move || {
-            let mut guard =
-                niri.inner.socket.lock().map_err(|_| anyhow::anyhow!("Mutex poisoned"))?;
+            let mut guard = niri.inner.socket.lock().unwrap_or_else(|e| e.into_inner());
 
             // Ensure we have a connection
             if guard.is_none() {
@@ -195,7 +191,42 @@ impl NiriIpc {
         .context("Task join error")?
     }
 
-    /// Get all windows
+    /// Get all windows (raw, without workspace name mapping)
+    /// Use this when you only need window id, app_id, title, pid, workspace_id, etc.
+    /// and don't need the human-readable workspace name field.
+    pub async fn get_windows_raw(&self) -> Result<Vec<Window>> {
+        match self.send_request(Request::Windows).await? {
+            Response::Windows(niri_windows) => {
+                let windows: Vec<Window> = niri_windows
+                    .into_iter()
+                    .map(|w| Window {
+                        id: w.id,
+                        title: w.title.unwrap_or_default(),
+                        app_id: w.app_id,
+                        class: None,
+                        floating: w.is_floating,
+                        workspace_id: w.workspace_id,
+                        workspace: None,
+                        output: None,
+                        layout: Some(WindowLayout {
+                            tile_pos: w.layout.tile_pos_in_workspace_view.map(|(x, y)| [x, y]),
+                            window_size: Some([
+                                w.layout.window_size.0 as u32,
+                                w.layout.window_size.1 as u32,
+                            ]),
+                            pos_in_scrolling_layout: w.layout.pos_in_scrolling_layout,
+                        }),
+                        pid: w.pid.map(|p| p as u32),
+                    })
+                    .collect();
+                Ok(windows)
+            }
+            _ => anyhow::bail!("Unexpected response type for Windows request"),
+        }
+    }
+
+    /// Get all windows with workspace name mapping
+    /// Use this when you need the workspace field (human-readable name/index).
     pub async fn get_windows(&self) -> Result<Vec<Window>> {
         match self.send_request(Request::Windows).await? {
             Response::Windows(niri_windows) => {
@@ -215,11 +246,11 @@ impl NiriIpc {
                             id: w.id,
                             title: w.title.unwrap_or_default(),
                             app_id: w.app_id,
-                            class: None, // niri_ipc::Window doesn't have class field
+                            class: None,
                             floating: w.is_floating,
                             workspace_id: w.workspace_id,
                             workspace,
-                            output: None, // niri_ipc::Window doesn't have output field directly
+                            output: None,
                             layout: Some(WindowLayout {
                                 tile_pos: w.layout.tile_pos_in_workspace_view.map(|(x, y)| [x, y]),
                                 window_size: Some([
@@ -456,23 +487,23 @@ impl NiriIpc {
     }
 
     /// Resize floating window using set-window-width and set-window-height
+    /// Sends both operations in a single blocking task for lower latency.
     pub async fn resize_floating_window(
         &self,
         window_id: u64,
         width: u32,
         height: u32,
     ) -> Result<()> {
-        // Set window width
-        self.send_action(Action::SetWindowWidth {
-            id: Some(window_id),
-            change: SizeChange::SetFixed(width as i32),
-        })
-        .await?;
-
-        // Set window height
-        self.send_action(Action::SetWindowHeight {
-            id: Some(window_id),
-            change: SizeChange::SetFixed(height as i32),
+        self.execute_batch(move |socket| {
+            let _ = socket.send(Request::Action(Action::SetWindowWidth {
+                id: Some(window_id),
+                change: SizeChange::SetFixed(width as i32),
+            }))?;
+            let _ = socket.send(Request::Action(Action::SetWindowHeight {
+                id: Some(window_id),
+                change: SizeChange::SetFixed(height as i32),
+            }))?;
+            Ok::<(), anyhow::Error>(())
         })
         .await
     }
@@ -498,7 +529,7 @@ impl NiriIpc {
 
     /// Get the output size for a specific output by name (from cache, sync)
     pub fn get_output_size_by_name(&self, output_name: &str) -> Option<(u32, u32)> {
-        let outputs = self.inner.outputs.lock().unwrap();
+        let outputs = self.inner.outputs.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(output) = outputs.get(output_name) {
             if let Some(ref logical) = output.logical {
                 return Some((logical.width, logical.height));
@@ -513,7 +544,7 @@ impl NiriIpc {
             Response::Outputs(outputs) => outputs,
             _ => anyhow::bail!("Unexpected response type for Outputs request"),
         };
-        *self.inner.outputs.lock().unwrap() = outputs;
+        *self.inner.outputs.lock().unwrap_or_else(|e| e.into_inner()) = outputs;
         Ok(())
     }
     /// Returns (x, y, width, height) if available
