@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{generate, shells};
 use log::info;
-use std::io;
+use std::io::{self, Write};
 use std::path::PathBuf;
 
 mod commands;
@@ -37,7 +37,11 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Start piri as a daemon
-    Daemon,
+    Daemon {
+        /// Force stop existing daemon and start a new one without prompt
+        #[arg(short, long)]
+        force: bool,
+    },
     /// Scratchpads management
     Scratchpads {
         /// Scratchpad name
@@ -185,7 +189,9 @@ async fn async_main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(log_level)).init();
 
     match cli.command {
-        Commands::Daemon => {
+        Commands::Daemon { force } => {
+            check_existing_daemon(force).await?;
+
             // Only load config when starting daemon
             let config_path = shellexpand::full(&cli.config)
                 .map(|s| PathBuf::from(s.as_ref()))
@@ -334,6 +340,33 @@ async fn async_main() -> Result<()> {
     }
 
     Ok(())
+}
+
+async fn check_existing_daemon(force: bool) -> Result<()> {
+    let client = IpcClient::new(None);
+    match client.send_request(IpcRequest::Ping).await {
+        Ok(IpcResponse::Pong) => {
+            if force {
+                eprintln!("A piri daemon is already running. Force stopping...");
+                let _ = client.send_request(IpcRequest::Shutdown).await;
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                return Ok(());
+            }
+            eprintln!("A piri daemon is already running.");
+            eprint!("Stop existing daemon and start a new one? [y/N] ");
+            let _ = std::io::stderr().flush();
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input).unwrap_or_default();
+            if matches!(input.trim().to_lowercase().as_str(), "y" | "yes") {
+                let _ = client.send_request(IpcRequest::Shutdown).await;
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                Ok(())
+            } else {
+                std::process::exit(0);
+            }
+        }
+        _ => Ok(()),
+    }
 }
 
 fn handle_ipc_response(
