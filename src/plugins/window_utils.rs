@@ -469,11 +469,7 @@ pub async fn move_window_to_named_workspace(
 
 /// Check if a window is in the current workspace
 pub fn is_window_in_workspace(window: &Window, workspace: &crate::niri::Workspace) -> bool {
-    match (&window.workspace, &window.workspace_id) {
-        (Some(ws), _) => ws == &workspace.name,
-        (_, Some(ws_id)) => ws_id.to_string() == workspace.name,
-        _ => false,
-    }
+    window.workspace_id == Some(workspace.id)
 }
 
 /// Get current workspace and all windows (commonly used together)

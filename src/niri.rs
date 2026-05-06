@@ -76,6 +76,7 @@ pub struct OutputLogical {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Workspace {
+    pub id: u64,
     pub name: String,
     pub focused: bool,
 }
@@ -342,6 +343,7 @@ impl NiriIpc {
                     if workspace.is_focused {
                         // Use idx field as workspace identifier
                         return Ok(Workspace {
+                            id: workspace.id,
                             name: workspace.idx.to_string(),
                             focused: true,
                         });
@@ -353,12 +355,14 @@ impl NiriIpc {
                 for window in windows {
                     if let Some(workspace) = &window.workspace {
                         return Ok(Workspace {
+                            id: window.workspace_id.unwrap_or(0),
                             name: workspace.clone(),
                             focused: true,
                         });
                     }
                     if let Some(workspace_id) = window.workspace_id {
                         return Ok(Workspace {
+                            id: workspace_id,
                             name: workspace_id.to_string(),
                             focused: true,
                         });
@@ -367,6 +371,7 @@ impl NiriIpc {
 
                 // Final fallback to default workspace
                 Ok(Workspace {
+                    id: 0,
                     name: "1".to_string(),
                     focused: true,
                 })

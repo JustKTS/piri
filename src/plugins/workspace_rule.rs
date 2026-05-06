@@ -107,18 +107,13 @@ impl WorkspaceRulePlugin {
         Ok(percent)
     }
 
-    fn filter_tiled_windows_in_workspace<'a>(
-        windows: &'a [crate::niri::Window],
-        workspace_name: &str,
-    ) -> Vec<&'a crate::niri::Window> {
+    fn filter_tiled_windows_in_workspace(
+        windows: &[crate::niri::Window],
+        workspace_id: u64,
+    ) -> Vec<&crate::niri::Window> {
         windows
             .iter()
-            .filter(|w| {
-                !w.floating
-                    && (w.workspace.as_deref() == Some(workspace_name)
-                        || w.workspace_id.map(|id| id.to_string()).as_deref()
-                            == Some(workspace_name))
-            })
+            .filter(|w| !w.floating && w.workspace_id == Some(workspace_id))
             .collect()
     }
 
@@ -336,7 +331,8 @@ impl WorkspaceRulePlugin {
     /// Returns `Ok(true)` if the window was merged into an existing column.
     async fn handle_auto_tile(&mut self, new_window: &crate::niri::Window) -> Result<bool> {
         let current_ws = self.niri.get_focused_workspace().await?;
-        let ws_name = current_ws.name;
+        let ws_name = &current_ws.name;
+        let ws_id = current_ws.id;
 
         if !self.get_auto_tile(&ws_name) {
             debug!("Auto_tile is not enabled for workspace {}", ws_name);
@@ -350,7 +346,7 @@ impl WorkspaceRulePlugin {
 
         // Get all windows in the workspace (excluding the new window)
         let windows = self.niri.get_windows().await?;
-        let ws_windows: Vec<_> = Self::filter_tiled_windows_in_workspace(&windows, &ws_name)
+        let ws_windows: Vec<_> = Self::filter_tiled_windows_in_workspace(&windows, ws_id)
             .into_iter()
             .filter(|w| w.id != new_window.id)
             .collect();
@@ -410,10 +406,11 @@ impl WorkspaceRulePlugin {
     async fn apply_widths(&mut self) -> Result<()> {
         let current_ws = self.niri.get_focused_workspace().await?;
         let ws_name = &current_ws.name;
+        let ws_id = current_ws.id;
         let windows = self.niri.get_windows().await?;
 
         // 1. Filter tiled windows in current workspace
-        let ws_windows = Self::filter_tiled_windows_in_workspace(&windows, ws_name);
+        let ws_windows = Self::filter_tiled_windows_in_workspace(&windows, ws_id);
 
         // 2. Group windows by column (one window ID per column is enough)
         // Calculate columns early for use throughout the function
