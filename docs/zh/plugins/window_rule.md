@@ -88,8 +88,6 @@ app_id = "chrome"
 open_on_workspace = "browser@eDP-1"
 ```
 
-**显示器前缀匹配**：指定 `"1@DP"` 会匹配所有以 `DP` 开头的输出（如 `DP-1`、`DP-2`）。前缀提取基于已知显示器命名约定（DP、eDP、HDMI、VGA、Virtual、None、Headless）。
-
 > **窗口匹配**: 关于窗口匹配机制的详细说明，请参阅 [窗口匹配机制文档](../window_matching.md) 和 [插件系统通用配置说明](plugins.md#通用配置说明)
 
 > **Workspace 标识符**: 关于 workspace 标识符（name/idx）的详细说明，请参阅 [插件系统通用配置说明](plugins.md#workspace-标识符)

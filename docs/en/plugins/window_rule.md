@@ -100,8 +100,6 @@ app_id = "chrome"
 open_on_workspace = "browser@eDP-1"
 ```
 
-**Display prefix matching**: Specifying `"1@DP"` matches any output starting with `DP` (e.g., `DP-1`, `DP-2`). The prefix is extracted from known display naming conventions (DP, eDP, HDMI, VGA, Virtual, None, Headless).
-
 ## How It Works
 
 The plugin listens for `WindowOpenedOrChanged` events:

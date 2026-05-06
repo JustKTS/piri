@@ -85,6 +85,34 @@ Pin floating window to follow focused workspace. Ideal for utility windows.
 - `--cross` controls cross-monitor behavior
 - Floating windows only
 
+## General Configuration Notes
+
+### Window Matching Mechanism
+
+Multiple plugins (such as `window_rule`, `singleton`, `scratchpads`) use a unified window matching mechanism, supporting regex matching on window `app_id` and `title`.
+
+**Key Features**:
+- Full regex syntax support
+- Match on `app_id` or `title`, or both (OR logic)
+- Special characters must be escaped (e.g., `.` → `\\.`)
+
+> **Details**: For complete documentation on the window matching mechanism, see [Window Matching Documentation](../window_matching.md)
+
+### Workspace Identifier
+
+Multiple plugins support specifying the target workspace by name or index:
+
+- **name**: Workspace name, e.g., `"main"`, `"work"`, `"dev"`
+- **idx**: Workspace index (1-based), e.g., `"1"`, `"2"`
+
+**Matching Order**: Name first, then idx. Plugins auto-detect the type and support cross-type matching.
+
+#### Multi-display Configuration
+
+**Display Interface Matching**: Specifying `"[name/idx]@DP"` matches all displays whose connector name starts with `DP` (e.g., `DP-1`, `DP-2`). Prefix extraction is based on known display interface naming conventions (DP, eDP, HDMI, VGA, DVI-D, DVI-I, Virtual).
+
+**Display Matching**: Specifying `"[name/idx]@DP-1"` matches specifically the display connected to `DP-1`.
+
 ## Plugin Control
 
 You can control which plugins are enabled or disabled in the configuration file:
