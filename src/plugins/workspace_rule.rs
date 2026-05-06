@@ -632,10 +632,12 @@ impl WorkspaceRulePlugin {
             // Will execute auto_fill at the end
         }
 
+        let mut auto_tiled = false;
         if is_new_tiled {
             let windows = self.niri.get_windows_raw().await?;
             if let Some(full_window) = windows.iter().find(|w| w.id == window.id) {
-                if self.handle_auto_tile(full_window).await.unwrap_or(false) {
+                auto_tiled = self.handle_auto_tile(full_window).await.unwrap_or(false);
+                if auto_tiled {
                     self.auto_tiled_windows.insert(window.id);
                 }
             }
@@ -645,14 +647,16 @@ impl WorkspaceRulePlugin {
             self.schedule_apply_widths().await?;
         }
 
-        // Always execute auto_fill at the end if enabled
-        self.try_execute_autofill(
-            ws_idx,
-            Some(ws_name.as_str()),
-            ws_output,
-            "window opened or changed",
-        )
-        .await?;
+        // Skip auto_fill when auto_tile merged the window into a column
+        if !auto_tiled {
+            self.try_execute_autofill(
+                ws_idx,
+                Some(ws_name.as_str()),
+                ws_output,
+                "window opened or changed",
+            )
+            .await?;
+        }
         self.sync_edge_pulse_indicator(None).await?;
 
         Ok(())
