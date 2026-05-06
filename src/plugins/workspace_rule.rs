@@ -71,6 +71,8 @@ pub struct WorkspaceRulePlugin {
     previous_layouts: HashMap<u64, niri_ipc::WindowLayout>,
     window_floating_state: HashMap<u64, bool>,
     maximized_windows: HashSet<u64>,
+    auto_tiled_windows: HashSet<u64>,
+    previous_window_sizes: HashMap<u64, (i32, i32)>,
     apply_widths_throttle: Arc<StdMutex<Throttle>>,
     autofill_executing: Arc<StdMutex<bool>>,
     edge_pulse_last_render: Option<EdgePulseRenderState>,
@@ -238,13 +240,15 @@ impl WorkspaceRulePlugin {
         let edge_cfg = self.get_edge_pulse_config(&ws_name).clone();
 
         if !edge_cfg.enabled {
-            if self.edge_pulse_last_render.take().is_some() {
-                info!(
-                    "EdgePulse disabled in workspace {}, hiding indicator",
-                    ws_name
-                );
+            if let Some(prev) = self.edge_pulse_last_render.take() {
+                if prev.show_left || prev.show_right {
+                    info!(
+                        "EdgePulse disabled in workspace {}, hiding indicator",
+                        ws_name
+                    );
+                    self.hide_edge_pulse()?;
+                }
             }
-            self.hide_edge_pulse()?;
             return Ok(());
         }
 
@@ -328,14 +332,15 @@ impl WorkspaceRulePlugin {
         Ok(())
     }
 
-    /// Handle auto_tile logic: merge new windows into existing columns (except first column)
-    async fn handle_auto_tile(&mut self, new_window: &crate::niri::Window) -> Result<()> {
+    /// Handle auto_tile logic: merge new windows into existing columns (except first column).
+    /// Returns `Ok(true)` if the window was merged into an existing column.
+    async fn handle_auto_tile(&mut self, new_window: &crate::niri::Window) -> Result<bool> {
         let current_ws = self.niri.get_focused_workspace().await?;
-        let ws_name = &current_ws.name;
+        let ws_name = current_ws.name;
 
-        if !self.get_auto_tile(ws_name) {
+        if !self.get_auto_tile(&ws_name) {
             debug!("Auto_tile is not enabled for workspace {}", ws_name);
-            return Ok(());
+            return Ok(false);
         }
 
         info!(
@@ -345,7 +350,7 @@ impl WorkspaceRulePlugin {
 
         // Get all windows in the workspace (excluding the new window)
         let windows = self.niri.get_windows().await?;
-        let ws_windows: Vec<_> = Self::filter_tiled_windows_in_workspace(&windows, ws_name)
+        let ws_windows: Vec<_> = Self::filter_tiled_windows_in_workspace(&windows, &ws_name)
             .into_iter()
             .filter(|w| w.id != new_window.id)
             .collect();
@@ -390,14 +395,14 @@ impl WorkspaceRulePlugin {
                 ColumnDisplay::Normal,
             )
             .await?;
+            Ok(true)
         } else {
             debug!(
                 "Auto-tile: no suitable column found for window {} (all non-first columns are full or empty)",
                 new_window.id
             );
+            Ok(false)
         }
-
-        Ok(())
     }
 
     /// Apply width adjustments to windows in current workspace
@@ -610,6 +615,7 @@ impl WorkspaceRulePlugin {
 
         if is_new {
             self.seen_windows.insert(window.id);
+            self.previous_window_sizes.insert(window.id, window.layout.window_size);
             if window.is_floating {
                 debug!("New floating window: {}", window.id);
                 // Will execute auto_fill at the end
@@ -621,13 +627,14 @@ impl WorkspaceRulePlugin {
             // Will execute auto_fill at the end
         }
 
+        let mut auto_tiled = false;
         if is_new_tiled {
             let windows = self.niri.get_windows_raw().await?;
             if let Some(full_window) = windows.iter().find(|w| w.id == window.id) {
-                self.handle_auto_tile(full_window)
-                    .await
-                    .map_err(|e| warn!("Auto_tile failed for window {}: {}", window.id, e))
-                    .ok();
+                auto_tiled = self.handle_auto_tile(full_window).await.unwrap_or(false);
+                if auto_tiled {
+                    self.auto_tiled_windows.insert(window.id);
+                }
             }
         }
 
@@ -635,8 +642,10 @@ impl WorkspaceRulePlugin {
             self.schedule_apply_widths().await?;
         }
 
-        // Always execute auto_fill at the end if enabled
-        self.try_execute_autofill(ws_name, "window opened or changed").await?;
+        // Skip auto_fill when auto_tile merged the window into a column
+        if !auto_tiled {
+            self.try_execute_autofill(ws_name, "window opened or changed").await?;
+        }
         self.sync_edge_pulse_indicator(None).await?;
 
         Ok(())
@@ -647,6 +656,8 @@ impl WorkspaceRulePlugin {
         self.previous_layouts.remove(&window_id);
         self.window_floating_state.remove(&window_id);
         self.maximized_windows.remove(&window_id);
+        self.auto_tiled_windows.remove(&window_id);
+        self.previous_window_sizes.remove(&window_id);
 
         debug!("Window {} closed, applying width adjustments", window_id);
         self.schedule_apply_widths().await?;
@@ -676,6 +687,8 @@ impl crate::plugins::Plugin for WorkspaceRulePlugin {
             previous_layouts: HashMap::new(),
             window_floating_state: HashMap::new(),
             maximized_windows: HashSet::new(),
+            auto_tiled_windows: HashSet::new(),
+            previous_window_sizes: HashMap::new(),
             apply_widths_throttle: Arc::new(StdMutex::new(Throttle::new())),
             autofill_executing: Arc::new(StdMutex::new(false)),
             edge_pulse_last_render: None,
@@ -694,6 +707,29 @@ impl crate::plugins::Plugin for WorkspaceRulePlugin {
             Event::WindowFocusChanged { id: Some(_) } => {
                 self.sync_edge_pulse_indicator(None).await?;
             }
+            Event::WindowLayoutsChanged { changes } => {
+                let current_ws = self.niri.get_focused_workspace().await?;
+                let ws_name = &current_ws.name;
+
+                let has_size_change = changes.iter().any(|(win_id, layout)| {
+                    let is_floating =
+                        self.window_floating_state.get(win_id).copied().unwrap_or(false);
+                    let changed = self
+                        .previous_window_sizes
+                        .get(win_id)
+                        .map(|prev| prev != &layout.window_size)
+                        .unwrap_or(false);
+                    if !is_floating && changed {
+                        self.previous_window_sizes.insert(*win_id, layout.window_size);
+                    }
+                    !is_floating && changed
+                });
+
+                if has_size_change {
+                    self.try_execute_autofill(ws_name, "window resized").await?;
+                    self.sync_edge_pulse_indicator(None).await?;
+                }
+            }
             Event::WorkspaceActivated { id, focused: true } => {
                 // Force re-evaluation on workspace switch; style and geometry may differ by workspace.
                 self.edge_pulse_last_render = None;
@@ -711,6 +747,7 @@ impl crate::plugins::Plugin for WorkspaceRulePlugin {
                 | Event::WindowClosed { .. }
                 | Event::WindowFocusChanged { id: Some(_) }
                 | Event::WorkspaceActivated { .. }
+                | Event::WindowLayoutsChanged { .. }
         )
     }
 
