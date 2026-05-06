@@ -242,7 +242,7 @@ impl WorkspaceRulePlugin {
                 if prev.show_left || prev.show_right {
                     info!(
                         "EdgePulse disabled in workspace {}, hiding indicator",
-                        ws_name
+                        ws_name.as_deref().unwrap_or("unknown")
                     );
                     self.hide_edge_pulse()?;
                 }
@@ -632,12 +632,10 @@ impl WorkspaceRulePlugin {
             // Will execute auto_fill at the end
         }
 
-        let mut auto_tiled = false;
         if is_new_tiled {
             let windows = self.niri.get_windows_raw().await?;
             if let Some(full_window) = windows.iter().find(|w| w.id == window.id) {
-                auto_tiled = self.handle_auto_tile(full_window).await.unwrap_or(false);
-                if auto_tiled {
+                if self.handle_auto_tile(full_window).await.unwrap_or(false) {
                     self.auto_tiled_windows.insert(window.id);
                 }
             }
@@ -738,7 +736,13 @@ impl crate::plugins::Plugin for WorkspaceRulePlugin {
                 });
 
                 if has_size_change {
-                    self.try_execute_autofill(ws_name, "window resized").await?;
+                    self.try_execute_autofill(
+                        current_ws.idx,
+                        Some(ws_name.as_str()),
+                        current_ws.output.as_deref(),
+                        "window resized",
+                    )
+                    .await?;
                     self.sync_edge_pulse_indicator(None).await?;
                 }
             }
