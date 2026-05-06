@@ -95,20 +95,12 @@ impl WindowOrderPlugin {
         let current_workspace = self.niri.get_focused_workspace().await?;
 
         // Get all windows
-        let windows: Vec<crate::niri::Window> = self.niri.get_windows().await?;
+        let windows: Vec<crate::niri::Window> = self.niri.get_windows_raw().await?;
 
-        // Filter windows in current workspace
+        // Filter tiled windows in current workspace by globally unique workspace ID
         let workspace_windows: Vec<_> = windows
             .iter()
-            .filter(|w| {
-                // Check if window is in current workspace
-                match (&w.workspace, &w.workspace_id) {
-                    (Some(ws), _) => ws == &current_workspace.name,
-                    (_, Some(ws_id)) => ws_id.to_string() == current_workspace.name,
-                    _ => false,
-                }
-            })
-            .filter(|w| !w.floating) // Only reorder tiled windows
+            .filter(|w| !w.floating && w.workspace_id == Some(current_workspace.id))
             .collect();
 
         if workspace_windows.is_empty() {
