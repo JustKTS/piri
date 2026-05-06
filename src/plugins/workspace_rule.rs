@@ -10,6 +10,7 @@ use tokio::time::Duration;
 use crate::config::{Config, EdgePulseConfig, WorkspaceRuleConfig, WorkspaceRuleSection};
 use crate::niri::NiriIpc;
 use crate::plugins::edge_pulse_renderer::{EdgePulseRenderState, EdgePulseRenderer};
+use crate::plugins::resolve_workspace_config;
 use crate::plugins::window_utils::perform_swallow;
 use crate::plugins::FromConfig;
 use crate::utils::Throttle;
@@ -117,8 +118,14 @@ impl WorkspaceRulePlugin {
             .collect()
     }
 
-    async fn try_execute_autofill(&self, workspace_name: &str, reason: &str) -> Result<()> {
-        if !self.get_auto_fill(workspace_name) {
+    async fn try_execute_autofill(
+        &self,
+        idx: u8,
+        name: Option<&str>,
+        output: Option<&str>,
+        reason: &str,
+    ) -> Result<()> {
+        if !self.get_auto_fill(idx, name, output) {
             return Ok(());
         }
 
@@ -131,10 +138,7 @@ impl WorkspaceRulePlugin {
             *executing = true;
         }
 
-        info!(
-            "Auto_fill: triggered by {} in workspace {}",
-            reason, workspace_name
-        );
+        info!("Auto_fill: triggered by {} in workspace {}", reason, idx);
 
         tokio::time::sleep(Duration::from_millis(100)).await;
 
@@ -150,45 +154,42 @@ impl WorkspaceRulePlugin {
     }
 
     /// Get auto_width configuration for a workspace
-    fn get_auto_width(&self, workspace_name: &str) -> &Vec<Vec<String>> {
-        self.config
-            .workspaces
-            .get(workspace_name)
+    fn get_auto_width(
+        &self,
+        idx: u8,
+        name: Option<&str>,
+        output: Option<&str>,
+    ) -> &Vec<Vec<String>> {
+        resolve_workspace_config(&self.config.workspaces, idx, name, output)
             .map(|c| &c.auto_width)
             .unwrap_or(&self.config.default.auto_width)
     }
 
-    /// Get auto_tile configuration for a workspace
-    fn get_auto_tile(&self, workspace_name: &str) -> bool {
-        self.config
-            .workspaces
-            .get(workspace_name)
+    fn get_auto_tile(&self, idx: u8, name: Option<&str>, output: Option<&str>) -> bool {
+        resolve_workspace_config(&self.config.workspaces, idx, name, output)
             .map(|c| c.auto_tile)
             .unwrap_or(self.config.default.auto_tile)
     }
 
-    /// Get auto_fill configuration for a workspace
-    fn get_auto_fill(&self, workspace_name: &str) -> bool {
-        self.config
-            .workspaces
-            .get(workspace_name)
+    fn get_auto_fill(&self, idx: u8, name: Option<&str>, output: Option<&str>) -> bool {
+        resolve_workspace_config(&self.config.workspaces, idx, name, output)
             .map(|c| c.auto_fill)
             .unwrap_or(self.config.default.auto_fill)
     }
 
-    /// Get auto_maximize configuration for a workspace
-    fn get_auto_maximize(&self, workspace_name: &str) -> bool {
-        self.config
-            .workspaces
-            .get(workspace_name)
+    fn get_auto_maximize(&self, idx: u8, name: Option<&str>, output: Option<&str>) -> bool {
+        resolve_workspace_config(&self.config.workspaces, idx, name, output)
             .map(|c| c.auto_maximize)
             .unwrap_or(self.config.default.auto_maximize)
     }
 
-    fn get_edge_pulse_config(&self, workspace_name: &str) -> &EdgePulseConfig {
-        self.config
-            .workspaces
-            .get(workspace_name)
+    fn get_edge_pulse_config(
+        &self,
+        idx: u8,
+        name: Option<&str>,
+        output: Option<&str>,
+    ) -> &EdgePulseConfig {
+        resolve_workspace_config(&self.config.workspaces, idx, name, output)
             .map(|c| &c.edge_pulse)
             .unwrap_or(&self.config.default.edge_pulse)
     }
@@ -213,10 +214,10 @@ impl WorkspaceRulePlugin {
     async fn sync_edge_pulse_indicator(&mut self, workspace_id: Option<u64>) -> Result<()> {
         // Resolve both workspace name (for config lookup) and ID (for window filtering).
         // Workspace ID is globally unique; idx is per-output and not unique across monitors.
-        let (ws_name, ws_id) = if let Some(id) = workspace_id {
+        let (ws_idx, ws_name, ws_output, ws_id) = if let Some(id) = workspace_id {
             let workspaces = self.niri.get_workspaces().await?;
             match workspaces.into_iter().find(|ws| ws.id == id) {
-                Some(ws) => (ws.idx.to_string(), ws.id),
+                Some(ws) => (ws.idx, ws.name, ws.output, ws.id),
                 None => {
                     self.hide_edge_pulse()?;
                     return Ok(());
@@ -225,14 +226,16 @@ impl WorkspaceRulePlugin {
         } else {
             let workspaces = self.niri.get_workspaces().await?;
             match workspaces.into_iter().find(|ws| ws.is_focused) {
-                Some(ws) => (ws.idx.to_string(), ws.id),
+                Some(ws) => (ws.idx, ws.name, ws.output, ws.id),
                 None => {
                     self.hide_edge_pulse()?;
                     return Ok(());
                 }
             }
         };
-        let edge_cfg = self.get_edge_pulse_config(&ws_name).clone();
+        let edge_cfg = self
+            .get_edge_pulse_config(ws_idx, ws_name.as_deref(), ws_output.as_deref())
+            .clone();
 
         if !edge_cfg.enabled {
             if let Some(prev) = self.edge_pulse_last_render.take() {
@@ -305,15 +308,14 @@ impl WorkspaceRulePlugin {
             output_height,
         )?;
         info!(
-            "EdgePulse {} => left={}, right={}, ws={}, focused_col={}, style(width={}, height_ratio={}, alpha={}, left=[{} -> {}], right=[{} -> {}])",
-            if state.show_left || state.show_right {
+            "EdgePulse {} => left={}, right={}, ws={}, focused_col={}, style(width={}, height_ratio={}, alpha={}, left=[{} -> {}], right=[{} -> {}])",            if state.show_left || state.show_right {
                 "show"
             } else {
                 "hide"
             },
             state.show_left,
             state.show_right,
-            ws_name,
+            ws_idx,
             focused_col,
             edge_cfg.width,
             edge_cfg.height_ratio,
@@ -331,10 +333,12 @@ impl WorkspaceRulePlugin {
     /// Returns `Ok(true)` if the window was merged into an existing column.
     async fn handle_auto_tile(&mut self, new_window: &crate::niri::Window) -> Result<bool> {
         let current_ws = self.niri.get_focused_workspace().await?;
+        let ws_idx = current_ws.idx;
         let ws_name = &current_ws.name;
+        let ws_output = current_ws.output.as_deref();
         let ws_id = current_ws.id;
 
-        if !self.get_auto_tile(&ws_name) {
+        if !self.get_auto_tile(ws_idx, Some(ws_name.as_str()), ws_output) {
             debug!("Auto_tile is not enabled for workspace {}", ws_name);
             return Ok(false);
         }
@@ -405,7 +409,9 @@ impl WorkspaceRulePlugin {
     /// The logic is based on column count, not window count (a column may have multiple windows)
     async fn apply_widths(&mut self) -> Result<()> {
         let current_ws = self.niri.get_focused_workspace().await?;
+        let ws_idx = current_ws.idx;
         let ws_name = &current_ws.name;
+        let ws_output = current_ws.output.as_deref();
         let ws_id = current_ws.id;
         let windows = self.niri.get_windows().await?;
 
@@ -427,7 +433,7 @@ impl WorkspaceRulePlugin {
         let column_count = columns.len();
 
         // 3. Handle auto_maximize: maximize when only one window, unmaximize when multiple windows
-        if self.get_auto_maximize(ws_name) {
+        if self.get_auto_maximize(ws_idx, Some(ws_name.as_str()), ws_output) {
             match ws_windows.len() {
                 0 => return Ok(()), // No windows, nothing to do
                 1 => {
@@ -458,7 +464,7 @@ impl WorkspaceRulePlugin {
                 }
                 _ => {
                     // Multiple windows: check if auto_width is configured
-                    let auto_width = self.get_auto_width(ws_name);
+                    let auto_width = self.get_auto_width(ws_idx, Some(ws_name.as_str()), ws_output);
                     let has_width_config = column_count > 0
                         && column_count <= 5
                         && auto_width.get(column_count.saturating_sub(1)).is_some();
@@ -504,7 +510,7 @@ impl WorkspaceRulePlugin {
         }
 
         // 4. Get width configuration
-        let auto_width = self.get_auto_width(ws_name);
+        let auto_width = self.get_auto_width(ws_idx, Some(ws_name.as_str()), ws_output);
         let width_config = if let Some(config) = auto_width.get(column_count.saturating_sub(1)) {
             config
         } else {
@@ -603,9 +609,11 @@ impl WorkspaceRulePlugin {
 
         self.window_floating_state.insert(window.id, window.is_floating);
 
-        // Get workspace name early for auto_fill execution at the end
+        // Get workspace info early for auto_fill execution at the end
         let current_ws = self.niri.get_focused_workspace().await?;
+        let ws_idx = current_ws.idx;
         let ws_name = &current_ws.name;
+        let ws_output = current_ws.output.as_deref();
 
         let is_new_tiled = is_new && !window.is_floating;
         let needs_adjustment = is_new_tiled || floating_changed;
@@ -639,10 +647,9 @@ impl WorkspaceRulePlugin {
             self.schedule_apply_widths().await?;
         }
 
-        // Skip auto_fill when auto_tile merged the window into a column
-        if !auto_tiled {
-            self.try_execute_autofill(ws_name, "window opened or changed").await?;
-        }
+        // Always execute auto_fill at the end if enabled
+        self.try_execute_autofill(ws_idx, Some(ws_name.as_str()), ws_output, "window opened or changed")
+            .await?;
         self.sync_edge_pulse_indicator(None).await?;
 
         Ok(())
@@ -660,8 +667,11 @@ impl WorkspaceRulePlugin {
         self.schedule_apply_widths().await?;
 
         let current_ws = self.niri.get_focused_workspace().await?;
+        let ws_idx = current_ws.idx;
         let ws_name = &current_ws.name;
-        self.try_execute_autofill(ws_name, "window closed").await?;
+        let ws_output = current_ws.output.as_deref();
+        self.try_execute_autofill(ws_idx, Some(ws_name.as_str()), ws_output, "window closed")
+            .await?;
         self.sync_edge_pulse_indicator(None).await?;
 
         Ok(())

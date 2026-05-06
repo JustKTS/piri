@@ -31,7 +31,9 @@ default_margin = 50
 # Workspace identifier can be:
 # - name (String): workspace name, e.g., "main", "work"
 # - idx (u8): workspace index, e.g., "1", "2", "3"
-# Note: Matching order is name first, then idx. ID (u64) is not used for matching.
+# - idx@output: workspace index on specific monitor, e.g., "1@DP-2", "1@HDMI-A-1"
+# - name@output: workspace name on specific monitor, e.g., "browser@DP-2"
+# Note: Matching order is idx@output first, then name@output, then name, then idx. ID (u64) is not used for matching.
 [empty.1] # workspace index
 command = "notify-send 'Workspace 1 is empty'"
 
@@ -82,7 +84,8 @@ auto_hide_on_focus_loss = true  # Optional: auto-hide when window loses focus
 # Format: [[window_rule]]
 # - app_id: regex pattern to match window app_id (optional, but at least one of app_id or title must be specified)
 # - title: regex pattern to match window title (optional, but at least one of app_id or title must be specified)
-# - open_on_workspace: workspace to move matching windows to (exact name or idx match, name first, then idx)
+# - open_on_workspace: workspace to move matching windows to (exact name or idx match,
+#   supports monitor scoping with "idx@output" or "name@output" syntax, e.g., "1@DP-2")
 # - focus_command: command to execute when window gains focus (optional)
 # Note:
 #   - If both app_id and title are specified, the rule matches if EITHER matches (OR logic)
@@ -155,7 +158,7 @@ app_id = 'singleton.term'
 # Format: [piri.window_order] for plugin config, [window_order] for app_id weights
 # - enable_event_listener: enable automatic reordering on events (default: false)
 # - default_weight: default weight for windows not specified (default: 0)
-# - workspaces: list of workspace names/indices to apply ordering (default: all workspaces)
+# - workspaces: list of workspace names/indices to apply ordering (supports "idx@output" syntax, default: all workspaces)
 # Use 'piri window_order toggle' to manually reorder windows in current workspace
 [piri.window_order]
 enable_event_listener = false
@@ -184,7 +187,9 @@ parent_app_id='.*ghostty.*'
 
 # Workspace rule: automatically adjust window widths based on window count
 # Format: [workspace_rule.{workspace}]
-# Workspace identifier can be name (e.g., "browser") or idx (e.g., "1")
+# Workspace identifier can be name (e.g., "browser"), idx (e.g., "1"),
+# or monitor-scoped: "idx@output" (e.g., "1@DP-2"), "name@output" (e.g., "browser@eDP-2")
+# Matching order: idx@output > name@output > name > idx (backward compatible fallback)
 # - auto_width: array where index corresponds to window count (1-based)
 #   Each element can be a string (all windows same width) or array (different widths per window)
 #   Examples:
@@ -227,3 +232,15 @@ auto_width = ["100%", "50%", ["30%", "35%", "35%"]]
 # Example: workspace with auto_maximize enabled
 [workspace_rule.main]
 auto_maximize = true
+
+# --- Monitor-scoped examples ---
+# Different auto_width for workspace 1 on different monitors
+# [workspace_rule."1@DP-2"]
+# auto_width = ["100%", "50%", "33.33%"]
+#
+# [workspace_rule."1@eDP-2"]
+# auto_width = ["100%", "50%", "33.33%", "25%"]
+#
+# Per-monitor empty workspace commands
+# [empty."1@HDMI-A-1"]
+# command = "alacritty"

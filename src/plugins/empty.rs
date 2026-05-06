@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
 use crate::niri::NiriIpc;
+use crate::plugins::resolve_workspace_config;
 use crate::plugins::{window_utils, FromConfig};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -59,20 +60,21 @@ impl EmptyPlugin {
         if let Some(focused_ws) =
             window_utils::get_focused_workspace_from_event(&self.niri, id).await?
         {
-            let workspace_key = focused_ws.idx.to_string();
             let is_empty = window_utils::is_workspace_empty(&self.niri, focused_ws.id).await?;
 
             if is_empty {
-                let command_opt = focused_ws
-                    .name
-                    .as_ref()
-                    .and_then(|name| self.config.workspaces.get(name))
-                    .or_else(|| self.config.workspaces.get(&workspace_key));
+                let command_opt = resolve_workspace_config(
+                    &self.config.workspaces,
+                    focused_ws.idx,
+                    focused_ws.name.as_deref(),
+                    focused_ws.output.as_deref(),
+                );
+                let idx_str = focused_ws.idx.to_string();
 
                 if let Some(cmd) = command_opt {
                     info!(
                         "Workspace {} matches empty rule, executing: {}",
-                        workspace_key, cmd
+                        idx_str, cmd
                     );
                     window_utils::execute_command(cmd)?;
                 }

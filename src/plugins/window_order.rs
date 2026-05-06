@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::config::Config;
 use crate::ipc::IpcRequest;
 use crate::niri::NiriIpc;
+use crate::plugins::workspace_matches_filter;
 use crate::plugins::FromConfig;
 
 /// Window order plugin config (for internal use)
@@ -70,50 +71,16 @@ impl WindowOrderPlugin {
         default_weight
     }
 
-    /// Check if window ordering should be applied to the given workspace
-    /// Returns true if workspaces list is empty (apply to all) or if workspace matches
-    fn should_apply_to_workspace(workspace_name: &str, workspaces: &[String]) -> bool {
-        debug!(
-            "Checking if window ordering should apply to workspace '{}', configured workspaces: {:?}",
-            workspace_name, workspaces
-        );
-
-        // If no workspaces specified, apply to all
-        if workspaces.is_empty() {
-            debug!("No workspaces configured, applying to all workspaces");
-            return true;
-        }
-
-        // Try to match workspace by exact name or idx
-        for configured_ws in workspaces.iter() {
-            // Exact name match
-            if configured_ws == workspace_name {
-                debug!(
-                    "Workspace '{}' matched configured workspace '{}' (exact name match)",
-                    workspace_name, configured_ws
-                );
-                return true;
-            }
-
-            // Exact idx match
-            if let (Ok(configured_idx), Ok(ws_idx)) =
-                (configured_ws.parse::<u32>(), workspace_name.parse::<u32>())
-            {
-                if configured_idx == ws_idx {
-                    debug!(
-                        "Workspace '{}' matched configured workspace '{}' (exact idx match)",
-                        workspace_name, configured_ws
-                    );
-                    return true;
-                }
-            }
-        }
-
-        debug!(
-            "Workspace '{}' did not match any configured workspace",
-            workspace_name
-        );
-        false
+    /// Check if window ordering should be applied to the given workspace.
+    /// Supports `@output` syntax in filter strings (e.g., "1@DP-2").
+    /// Returns true if workspaces list is empty (apply to all) or if workspace matches.
+    fn should_apply_to_workspace(
+        idx: u8,
+        name: Option<&str>,
+        output: Option<&str>,
+        workspaces: &[String],
+    ) -> bool {
+        workspace_matches_filter(idx, name, output, workspaces)
     }
 
     /// Reorder windows in the current workspace based on configuration
@@ -541,7 +508,12 @@ impl crate::plugins::Plugin for WindowOrderPlugin {
 
         let current_workspace = self.niri.get_focused_workspace().await?;
 
-        if !Self::should_apply_to_workspace(&current_workspace.name, &self.config.workspaces) {
+        if !Self::should_apply_to_workspace(
+            current_workspace.idx,
+            Some(current_workspace.name.as_str()),
+            current_workspace.output.as_deref(),
+            &self.config.workspaces,
+        ) {
             return Ok(());
         }
 

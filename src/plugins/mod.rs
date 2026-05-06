@@ -58,6 +58,73 @@ pub trait Plugin: Send + Sync {
     }
 }
 
+/// Resolve a workspace config key with monitor-aware lookup.
+///
+/// Resolution order (first match wins):
+/// 1. `"{idx}@{output}"`   — e.g., "1@DP-2" (most specific)
+/// 2. `"{name}@{output}"`  — e.g., "browser@DP-2"
+/// 3. `"{name}"`           — e.g., "browser" (by name only)
+/// 4. `"{idx}"`            — e.g., "1" (fallback, backward compatible)
+pub fn resolve_workspace_config<'a, T>(
+    map: &'a std::collections::HashMap<String, T>,
+    idx: u8,
+    name: Option<&str>,
+    output: Option<&str>,
+) -> Option<&'a T> {
+    if let Some(out) = output {
+        let key = format!("{}@{}", idx, out);
+        if let Some(v) = map.get(&key) {
+            return Some(v);
+        }
+        if let Some(n) = name {
+            let key = format!("{}@{}", n, out);
+            if let Some(v) = map.get(&key) {
+                return Some(v);
+            }
+        }
+    }
+    if let Some(n) = name {
+        if let Some(v) = map.get(n) {
+            return Some(v);
+        }
+    }
+    map.get(&idx.to_string())
+}
+
+/// Check if a workspace matches any filter in a list (supports `@output` syntax).
+///
+/// Each filter can be:
+/// - `"idx"`             — match any workspace with that index
+/// - `"name"`            — match any workspace with that name
+/// - `"idx@output"`      — match workspace with that index on that output
+/// - `"name@output"`     — match workspace with that name on that output
+///
+/// If `filters` is empty, all workspaces match.
+pub fn workspace_matches_filter(
+    idx: u8,
+    name: Option<&str>,
+    output: Option<&str>,
+    filters: &[String],
+) -> bool {
+    if filters.is_empty() {
+        return true;
+    }
+    let idx_str = idx.to_string();
+    for filter in filters {
+        // Check `name@output` / `idx@output` syntax first
+        if let Some((left, right)) = filter.split_once('@') {
+            if Some(right) == output && (left == idx_str || Some(left) == name) {
+                return true;
+            }
+        }
+        // Direct name or idx match
+        if Some(filter.as_str()) == name || *filter == idx_str {
+            return true;
+        }
+    }
+    false
+}
+
 pub trait FromConfig {
     fn from_config(config: &Config) -> Option<Self>
     where
