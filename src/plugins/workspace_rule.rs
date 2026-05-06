@@ -238,13 +238,15 @@ impl WorkspaceRulePlugin {
         let edge_cfg = self.get_edge_pulse_config(&ws_name).clone();
 
         if !edge_cfg.enabled {
-            if self.edge_pulse_last_render.take().is_some() {
-                info!(
-                    "EdgePulse disabled in workspace {}, hiding indicator",
-                    ws_name
-                );
+            if let Some(prev) = self.edge_pulse_last_render.take() {
+                if prev.show_left || prev.show_right {
+                    info!(
+                        "EdgePulse disabled in workspace {}, hiding indicator",
+                        ws_name
+                    );
+                    self.hide_edge_pulse()?;
+                }
             }
-            self.hide_edge_pulse()?;
             return Ok(());
         }
 
