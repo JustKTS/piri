@@ -234,13 +234,20 @@ auto_width = ["100%", "50%", ["30%", "35%", "35%"]]
 auto_maximize = true
 
 # --- Monitor-scoped examples ---
-# Different auto_width for workspace 1 on different monitors
+#
+# Exact match: applies to a specific monitor
 # [workspace_rule."1@DP-2"]
 # auto_width = ["100%", "50%", "33.33%"]
 #
-# [workspace_rule."1@eDP-2"]
+# Display prefix match: applies to all monitors of that type
+# "1@DP" matches DP-1, DP-2, DP-3, ...
+# "1@HDMI" matches HDMI-A-1, HDMI-A-2, ...
+# [workspace_rule."1@DP"]
+# auto_width = ["100%", "50%", "33.33%"]
+# [workspace_rule."1@eDP"]
 # auto_width = ["100%", "50%", "33.33%", "25%"]
 #
 # Per-monitor empty workspace commands
-# [empty."1@HDMI-A-1"]
+# [empty."1@HDMI-A-1"]     ← exact match
+# [empty."1@HDMI"]          ← display prefix match
 # command = "alacritty"

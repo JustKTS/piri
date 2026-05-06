@@ -648,8 +648,13 @@ impl WorkspaceRulePlugin {
         }
 
         // Always execute auto_fill at the end if enabled
-        self.try_execute_autofill(ws_idx, Some(ws_name.as_str()), ws_output, "window opened or changed")
-            .await?;
+        self.try_execute_autofill(
+            ws_idx,
+            Some(ws_name.as_str()),
+            ws_output,
+            "window opened or changed",
+        )
+        .await?;
         self.sync_edge_pulse_indicator(None).await?;
 
         Ok(())
