@@ -15,8 +15,8 @@ use crate::plugins::window_utils::{
     WindowMatcherCache,
 };
 use crate::plugins::FromConfig;
+use crate::plugins::PiriEvent;
 use crate::utils::send_notification;
-use niri_ipc::Event;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScratchpadsPluginConfig {
@@ -684,9 +684,9 @@ impl crate::plugins::Plugin for ScratchpadsPlugin {
         }
     }
 
-    async fn handle_event(&mut self, event: &Event, _niri: &NiriIpc) -> Result<()> {
+    async fn handle_event(&mut self, event: &PiriEvent, _niri: &NiriIpc) -> Result<()> {
         // Scratchpads only handle auto_hide_on_focus_loss; sticky is delegated to sticky plugin
-        if let Event::WindowFocusChanged {
+        if let PiriEvent::WindowFocusChanged {
             id: Some(window_id),
         } = event
         {
@@ -697,10 +697,10 @@ impl crate::plugins::Plugin for ScratchpadsPlugin {
         Ok(())
     }
 
-    fn is_interested_in_event(&self, event: &Event) -> bool {
+    fn is_interested_in_event(&self, event: &PiriEvent) -> bool {
         // Only interested in WindowFocusChanged for auto_hide_on_focus_loss
         // Sticky behavior is handled entirely by the sticky plugin via global registry
-        matches!(event, Event::WindowFocusChanged { id: Some(_) })
+        matches!(event, PiriEvent::WindowFocusChanged { id: Some(_) })
             && self.manager.states.values().any(|s| s.config.auto_hide_on_focus_loss)
     }
 }

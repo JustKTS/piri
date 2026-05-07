@@ -1,5 +1,6 @@
 pub mod edge_pulse_renderer;
 pub mod empty;
+pub mod events;
 pub mod mark;
 pub mod render;
 pub mod scratchpads;
@@ -14,9 +15,10 @@ pub mod workspace_rule;
 use anyhow::Result;
 use async_trait::async_trait;
 use log::{debug, info, warn};
-use niri_ipc::Event;
 use tokio::sync::mpsc;
 use tokio::time::Duration;
+
+pub use events::PiriEvent;
 
 use crate::config::Config;
 use crate::ipc::IpcRequest;
@@ -56,19 +58,13 @@ pub trait Plugin: Send + Sync {
         Ok(None)
     }
 
-    async fn handle_event(&mut self, _event: &Event, _niri: &NiriIpc) -> Result<()> {
+    async fn handle_event(&mut self, _event: &PiriEvent, _niri: &NiriIpc) -> Result<()> {
         Ok(())
     }
 
-    /// Check if plugin is interested in a specific event type
-    /// This is used by PluginManager for event filtering to avoid calling plugins that don't care about the event.
+    /// Check if plugin is interested in a specific event type.
     /// Only events that pass this filter will be passed to handle_event().
-    ///
-    /// Note: Plugins should NOT duplicate event type checking in handle_event() - if an event
-    /// reaches handle_event(), it has already been filtered by is_interested_in_event().
-    ///
-    /// Default implementation returns true (receive all events for backward compatibility)
-    fn is_interested_in_event(&self, _event: &Event) -> bool {
+    fn is_interested_in_event(&self, _event: &PiriEvent) -> bool {
         false
     }
 
@@ -176,13 +172,13 @@ macro_rules! register_plugins {
                 }
             }
 
-            async fn handle_event(&mut self, event: &Event, niri: &NiriIpc) -> Result<()> {
+            async fn handle_event(&mut self, event: &PiriEvent, niri: &NiriIpc) -> Result<()> {
                 match self {
                     $(PluginEnum::$variant(p) => p.handle_event(event, niri).await,)*
                 }
             }
 
-            fn is_interested_in_event(&self, event: &Event) -> bool {
+            fn is_interested_in_event(&self, event: &PiriEvent) -> bool {
                 match self {
                     $(PluginEnum::$variant(p) => p.is_interested_in_event(event),)*
                 }
@@ -224,6 +220,13 @@ macro_rules! register_plugins {
                         ))
                     }).await?;
                 )*
+
+                // Seed the normalizer with the current window list to avoid
+                // false WindowOpened events for already-open windows.
+                if let Ok(windows) = niri.get_windows_raw().await {
+                    self.normalizer.rebuild_from_piri_windows(&windows);
+                }
+
                 Ok(())
             }
         }
@@ -245,7 +248,8 @@ register_plugins! {
 pub struct PluginManager {
     plugins: Vec<PluginEnum>,
     event_listener_handle: Option<tokio::task::JoinHandle<()>>,
-    event_sender: Option<mpsc::UnboundedSender<Event>>,
+    event_sender: Option<mpsc::UnboundedSender<niri_ipc::Event>>,
+    normalizer: events::EventNormalizer,
 }
 
 impl Default for PluginManager {
@@ -260,13 +264,14 @@ impl PluginManager {
             plugins: Vec::new(),
             event_listener_handle: None,
             event_sender: None,
+            normalizer: events::EventNormalizer::new(),
         }
     }
 
     pub async fn start_event_listener(
         &mut self,
         niri: NiriIpc,
-    ) -> Result<mpsc::UnboundedReceiver<Event>> {
+    ) -> Result<mpsc::UnboundedReceiver<niri_ipc::Event>> {
         let (tx, rx) = mpsc::unbounded_channel();
         let tx_clone = tx.clone();
         self.event_sender = Some(tx);
@@ -281,7 +286,7 @@ impl PluginManager {
         Ok(rx)
     }
 
-    async fn event_listener_loop(niri: NiriIpc, event_tx: mpsc::UnboundedSender<Event>) {
+    async fn event_listener_loop(niri: NiriIpc, event_tx: mpsc::UnboundedSender<niri_ipc::Event>) {
         info!("Plugin manager event listener started");
 
         let mut is_first_connection = true;
@@ -329,15 +334,18 @@ impl PluginManager {
         }
     }
 
-    /// Distribute event to all plugins (called from daemon loop)
-    /// Only plugins that are interested in the event type will receive it
-    pub async fn distribute_event(&mut self, event: &Event, niri: &NiriIpc) {
-        for plugin in &mut self.plugins {
-            // Check if plugin is interested in this event type
-            if plugin.is_interested_in_event(event) {
-                if let Err(e) = plugin.handle_event(event, niri).await {
-                    log::warn!("Plugin {} error: {}", plugin.name(), e);
-                    send_notification("piri", &format!("Plugin {} error", plugin.name()));
+    /// Distribute event to all plugins (called from daemon loop).
+    /// Normalizes niri events into PiriEvents before dispatching.
+    pub async fn distribute_event(&mut self, event: &niri_ipc::Event, niri: &NiriIpc) {
+        let piri_events = self.normalizer.normalize_event(event);
+
+        for piri_event in &piri_events {
+            for plugin in &mut self.plugins {
+                if plugin.is_interested_in_event(piri_event) {
+                    if let Err(e) = plugin.handle_event(piri_event, niri).await {
+                        log::warn!("Plugin {} error: {}", plugin.name(), e);
+                        send_notification("piri", &format!("Plugin {} error", plugin.name()));
+                    }
                 }
             }
         }

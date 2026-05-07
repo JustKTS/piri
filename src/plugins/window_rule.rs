@@ -1,7 +1,7 @@
+use crate::plugins::PiriEvent;
 use anyhow::Result;
 use log::{debug, info};
-use niri_ipc::Event;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -48,6 +48,8 @@ pub struct WindowRulePlugin {
     last_handled_window: Option<u64>,
     /// Throttle for handle_focus_command
     handle_throttle: Throttle,
+    /// Windows locked to a specific workspace (window_id -> workspace_name)
+    locked_windows: HashMap<u64, String>,
 }
 
 impl WindowRulePlugin {
@@ -165,8 +167,19 @@ impl WindowRulePlugin {
         if let Some((rule_index, open_on_workspace, focus_command, focus_once)) = matched_rule {
             // 1. Move to workspace if specified
             if let Some(ref workspace_name) = open_on_workspace {
-                window_utils::move_window_to_named_workspace(&self.niri, window, workspace_name)
-                    .await?;
+                // Check for lock suffix '!'
+                let (target, locked) = if let Some(name) = workspace_name.strip_suffix('!') {
+                    (name, true)
+                } else {
+                    (workspace_name.as_str(), false)
+                };
+
+                window_utils::move_window_to_named_workspace(&self.niri, window, target).await?;
+
+                if locked {
+                    info!("Window {} locked to workspace '{}'", window.id, target);
+                    self.locked_windows.insert(window.id, target.to_string());
+                }
             }
 
             // 2. Execute focus command if specified (unified de-duplication)
@@ -175,6 +188,53 @@ impl WindowRulePlugin {
                     .await?;
             }
         }
+        Ok(())
+    }
+
+    /// Check if a locked window is still on the correct workspace; move it back if not.
+    async fn enforce_workspace_lock(&self, window: &niri_ipc::Window) -> Result<()> {
+        let Some(target_workspace) = self.locked_windows.get(&window.id) else {
+            return Ok(());
+        };
+
+        // Resolve the target workspace ID
+        let workspaces = self.niri.get_workspaces_for_mapping().await?;
+        let (target_name, want_output) = target_workspace
+            .split_once('@')
+            .map(|(name, output)| (name, Some(output)))
+            .unwrap_or((target_workspace.as_str(), None));
+
+        let focused_output = self.niri.get_focused_output().await.ok().map(|o| o.name);
+
+        let find_on_output = |output_name: &str| -> Option<&niri_ipc::Workspace> {
+            workspaces.iter().find(|ws| {
+                ws.output.as_deref().is_some_and(|o| {
+                    o == output_name || super::extract_display_prefix(o) == Some(output_name)
+                }) && (ws.name.as_deref() == Some(target_name) || ws.idx.to_string() == target_name)
+            })
+        };
+
+        let matched_ws = if let Some(want) = want_output {
+            find_on_output(want)
+        } else {
+            focused_output.as_deref().and_then(find_on_output).or_else(|| {
+                workspaces.iter().find(|ws| {
+                    ws.name.as_deref() == Some(target_name) || ws.idx.to_string() == target_name
+                })
+            })
+        };
+
+        if let Some(target) = matched_ws {
+            if window.workspace_id != Some(target.id) {
+                info!(
+                    "Window {} escaped workspace '{}', moving back",
+                    window.id, target_workspace
+                );
+                window_utils::move_window_to_named_workspace(&self.niri, window, target_workspace)
+                    .await?;
+            }
+        }
+
         Ok(())
     }
 }
@@ -197,29 +257,39 @@ impl crate::plugins::Plugin for WindowRulePlugin {
             executed_rules: HashSet::new(),
             last_handled_window: None,
             handle_throttle: Throttle::new(),
+            locked_windows: HashMap::new(),
         }
     }
 
-    async fn handle_event(&mut self, event: &Event, _niri: &NiriIpc) -> Result<()> {
+    async fn handle_event(&mut self, event: &PiriEvent, _niri: &NiriIpc) -> Result<()> {
         match event {
-            Event::WindowFocusChanged {
+            PiriEvent::WindowFocusChanged {
                 id: Some(window_id),
             } => {
                 tokio::time::sleep(Duration::from_millis(10)).await;
                 self.handle_focus_command(*window_id).await?;
             }
-            Event::WindowOpenedOrChanged { window } => {
+            PiriEvent::WindowOpened { window } => {
                 self.handle_window_opened(window).await?;
+            }
+            PiriEvent::WindowChanged { window } => {
+                self.enforce_workspace_lock(window).await.ok();
+            }
+            PiriEvent::WindowClosed { id } => {
+                self.locked_windows.remove(id);
             }
             _ => {}
         }
         Ok(())
     }
 
-    fn is_interested_in_event(&self, event: &Event) -> bool {
+    fn is_interested_in_event(&self, event: &PiriEvent) -> bool {
         matches!(
             event,
-            Event::WindowOpenedOrChanged { .. } | Event::WindowFocusChanged { id: Some(_) }
+            PiriEvent::WindowOpened { .. }
+                | PiriEvent::WindowChanged { .. }
+                | PiriEvent::WindowClosed { .. }
+                | PiriEvent::WindowFocusChanged { id: Some(_) }
         )
     }
 

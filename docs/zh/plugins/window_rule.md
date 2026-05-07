@@ -63,7 +63,7 @@ open_on_workspace = "browser"
 
 - `app_id` (可选): 正则匹配窗口 `app_id`，支持字符串或列表（OR 逻辑）
 - `title` (可选): 正则匹配窗口标题，支持字符串或列表（OR 逻辑）
-- `open_on_workspace` (可选): 目标 workspace（名称/索引），支持 `workspace@output` 格式指定显示器
+- `open_on_workspace` (可选): 目标 workspace（名称/索引），支持 `workspace@output` 格式指定显示器。末尾加 `!` 可将窗口锁定在该 workspace（如 `"1@eDP!"`）
 - `focus_command` (可选): 窗口获焦时执行命令
 - `focus_command_once` (默认 `false`): 规则级单次执行（[issue #1](https://github.com/Asthestarsfalll/piri/issues/1)）
 
@@ -94,17 +94,37 @@ open_on_workspace = "browser@eDP-1"
 
 ## 工作原理
 
-监听 `WindowOpenedOrChanged` 事件：
+监听 `WindowOpened` 事件：
 
 1. 正则匹配窗口 `app_id`/`title`
 2. 匹配后自动移至指定 workspace
 3. 按配置顺序检查，**首条匹配规则生效**
+4. 如果 `open_on_workspace` 以 `!` 结尾，窗口将被锁定在该 workspace
+
+### Workspace 锁定
+
+在 `open_on_workspace` 末尾加 `!` 可将窗口锁定在指定 workspace，窗口无法被手动移走：
+
+```toml
+# 锁定到 workspace 1（eDP 显示器）
+[[window_rule]]
+app_id = "firefox"
+open_on_workspace = "1@eDP!"
+
+# 锁定到名为 "dev" 的 workspace
+[[window_rule]]
+app_id = "^code$"
+open_on_workspace = "dev!"
+```
+
+锁定的窗口在每次属性变化时会被检查，如果不在目标 workspace 则自动移回。
 
 ## 特性
 
 - ✅ 正则匹配（`app_id`/`title`，支持列表与 OR 逻辑）
 - ✅ 正则缓存，提升性能
 - ✅ 配置热更新，无需重启
+- ✅ Workspace 锁定（`!` 后缀），防止窗口被移走
 
 ## focus_command_once
 

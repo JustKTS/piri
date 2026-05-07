@@ -1,7 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use log::{debug, info, warn};
-use niri_ipc::{ColumnDisplay, Event};
+use niri_ipc::ColumnDisplay;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -330,19 +330,6 @@ impl SwallowPlugin {
     async fn handle_window_opened(&mut self, window: &niri_ipc::Window) -> Result<()> {
         let window_id = window.id;
 
-        // If ID is already in the map, it's a Changed event, skip it.
-        let should_skip = {
-            let map = self.window_pid_map.lock().await;
-            map.values().any(|window_ids| window_ids.contains(&window_id))
-        };
-        if should_skip {
-            debug!(
-                "Window {} already in map, skipping (Changed event)",
-                window_id
-            );
-            return Ok(());
-        }
-
         let child_window = self.niri.convert_window(window).await?;
 
         match child_window.pid {
@@ -487,21 +474,25 @@ impl crate::plugins::Plugin for SwallowPlugin {
         Ok(())
     }
 
-    fn is_interested_in_event(&self, event: &Event) -> bool {
+    fn is_interested_in_event(&self, event: &crate::plugins::PiriEvent) -> bool {
         matches!(
             event,
-            Event::WindowOpenedOrChanged { .. }
-                | Event::WindowClosed { .. }
-                | Event::WindowFocusTimestampChanged { .. }
+            crate::plugins::PiriEvent::WindowOpened { .. }
+                | crate::plugins::PiriEvent::WindowClosed { .. }
+                | crate::plugins::PiriEvent::WindowFocusTimestampChanged { .. }
         )
     }
 
-    async fn handle_event(&mut self, event: &Event, _niri: &NiriIpc) -> Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: &crate::plugins::PiriEvent,
+        _niri: &NiriIpc,
+    ) -> Result<()> {
         match event {
-            Event::WindowOpenedOrChanged { window } => {
+            crate::plugins::PiriEvent::WindowOpened { window } => {
                 self.handle_window_opened(window).await?;
             }
-            Event::WindowClosed { id } => {
+            crate::plugins::PiriEvent::WindowClosed { id } => {
                 // Remove window id from all pid entries
                 {
                     let mut map = self.window_pid_map.lock().await;
@@ -515,7 +506,7 @@ impl crate::plugins::Plugin for SwallowPlugin {
                 // Remove window id from focused window queue
                 self.focused_window_queue.retain(|&window_id| window_id != *id);
             }
-            Event::WindowFocusTimestampChanged { id, .. } => {
+            crate::plugins::PiriEvent::WindowFocusTimestampChanged { id, .. } => {
                 // Add new focused window to queue
                 // Remove the window ID from queue if it already exists (to avoid duplicates)
                 self.focused_window_queue.retain(|&window_id| window_id != *id);

@@ -1,6 +1,6 @@
+use crate::plugins::PiriEvent;
 use anyhow::Result;
 use log::info;
-use niri_ipc::Event;
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
@@ -47,9 +47,9 @@ pub struct EmptyPlugin {
 }
 
 impl EmptyPlugin {
-    async fn handle_event_internal(&self, event: &Event) -> Result<()> {
+    async fn handle_event_internal(&self, event: &PiriEvent) -> Result<()> {
         let (id, focused) = match event {
-            Event::WorkspaceActivated { id, focused } => (*id, *focused),
+            PiriEvent::WorkspaceActivated { id, focused } => (*id, *focused),
             _ => return Ok(()),
         };
 
@@ -97,12 +97,12 @@ impl crate::plugins::Plugin for EmptyPlugin {
         Self { niri, config }
     }
 
-    async fn handle_event(&mut self, event: &Event, _niri: &NiriIpc) -> Result<()> {
+    async fn handle_event(&mut self, event: &PiriEvent, _niri: &NiriIpc) -> Result<()> {
         self.handle_event_internal(event).await
     }
 
-    fn is_interested_in_event(&self, event: &Event) -> bool {
-        matches!(event, Event::WorkspaceActivated { .. })
+    fn is_interested_in_event(&self, event: &PiriEvent) -> bool {
+        matches!(event, PiriEvent::WorkspaceActivated { .. })
     }
 
     async fn update_config(&mut self, config: EmptyPluginConfig) -> Result<()> {

@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use log::{debug, info, warn};
-use niri_ipc::{Action, Event, Reply, Request, SizeChange};
+use niri_ipc::{Action, Reply, Request, SizeChange};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex as StdMutex};
@@ -68,7 +68,6 @@ impl FromConfig for WorkspaceRulePluginConfig {
 pub struct WorkspaceRulePlugin {
     niri: NiriIpc,
     config: WorkspaceRulePluginConfig,
-    seen_windows: HashSet<u64>,
     previous_layouts: HashMap<u64, niri_ipc::WindowLayout>,
     window_floating_state: HashMap<u64, bool>,
     maximized_windows: HashSet<u64>,
@@ -601,69 +600,84 @@ impl WorkspaceRulePlugin {
         Ok(())
     }
 
-    async fn handle_window_opened_or_changed(&mut self, window: &niri_ipc::Window) -> Result<()> {
-        let is_new = !self.seen_windows.contains(&window.id);
-        let previous_floating = self.window_floating_state.get(&window.id).copied();
-        let floating_changed =
-            previous_floating.map(|prev| prev != window.is_floating).unwrap_or(false);
-
-        self.window_floating_state.insert(window.id, window.is_floating);
-
-        // Get workspace info early for auto_fill execution at the end
+    async fn on_window_opened(&mut self, window: &niri_ipc::Window) -> Result<()> {
         let current_ws = self.niri.get_focused_workspace().await?;
         let ws_idx = current_ws.idx;
         let ws_name = &current_ws.name;
         let ws_output = current_ws.output.as_deref();
 
-        let is_new_tiled = is_new && !window.is_floating;
-        let needs_adjustment = is_new_tiled || floating_changed;
+        self.previous_window_sizes.insert(window.id, window.layout.window_size);
+        self.window_floating_state.insert(window.id, window.is_floating);
 
-        if is_new {
-            self.seen_windows.insert(window.id);
-            self.previous_window_sizes.insert(window.id, window.layout.window_size);
-            if window.is_floating {
-                debug!("New floating window: {}", window.id);
-                // Will execute auto_fill at the end
-            } else {
-                debug!("New tiled window: {}", window.id);
-            }
-        } else if !needs_adjustment {
-            debug!("Window {} changed (no action needed)", window.id);
-            // Will execute auto_fill at the end
-        }
-
-        let mut auto_tiled = false;
-        if is_new_tiled {
+        if window.is_floating {
+            debug!("New floating window: {}", window.id);
+        } else {
+            debug!("New tiled window: {}", window.id);
             let windows = self.niri.get_windows_raw().await?;
             if let Some(full_window) = windows.iter().find(|w| w.id == window.id) {
-                auto_tiled = self.handle_auto_tile(full_window).await.unwrap_or(false);
+                let auto_tiled = self.handle_auto_tile(full_window).await.unwrap_or(false);
                 if auto_tiled {
                     self.auto_tiled_windows.insert(window.id);
+                }
+                if !auto_tiled {
+                    self.schedule_apply_widths().await?;
+                    self.try_execute_autofill(
+                        ws_idx,
+                        Some(ws_name.as_str()),
+                        ws_output,
+                        "window opened",
+                    )
+                    .await?;
+                } else {
+                    self.schedule_apply_widths().await?;
                 }
             }
         }
 
-        if needs_adjustment {
-            self.schedule_apply_widths().await?;
-        }
-
-        // Skip auto_fill when auto_tile merged the window into a column
-        if !auto_tiled {
-            self.try_execute_autofill(
-                ws_idx,
-                Some(ws_name.as_str()),
-                ws_output,
-                "window opened or changed",
-            )
-            .await?;
-        }
         self.sync_edge_pulse_indicator(None).await?;
+        Ok(())
+    }
 
+    async fn on_window_changed(&mut self, _window: &niri_ipc::Window) -> Result<()> {
+        self.sync_edge_pulse_indicator(None).await?;
+        Ok(())
+    }
+
+    async fn on_window_toggle_floating(&mut self, window: &niri_ipc::Window) -> Result<()> {
+        self.window_floating_state.insert(window.id, window.is_floating);
+
+        let current_ws = self.niri.get_focused_workspace().await?;
+        let ws_idx = current_ws.idx;
+        let ws_name = &current_ws.name;
+        let ws_output = current_ws.output.as_deref();
+
+        self.schedule_apply_widths().await?;
+
+        if !window.is_floating {
+            // Moved to tiled — try auto_tile and auto_fill
+            let windows = self.niri.get_windows_raw().await?;
+            if let Some(full_window) = windows.iter().find(|w| w.id == window.id) {
+                let auto_tiled = self.handle_auto_tile(full_window).await.unwrap_or(false);
+                if auto_tiled {
+                    self.auto_tiled_windows.insert(window.id);
+                }
+                if !auto_tiled {
+                    self.try_execute_autofill(
+                        ws_idx,
+                        Some(ws_name.as_str()),
+                        ws_output,
+                        "window moved to tiled",
+                    )
+                    .await?;
+                }
+            }
+        }
+
+        self.sync_edge_pulse_indicator(None).await?;
         Ok(())
     }
 
     async fn handle_window_closed(&mut self, window_id: u64) -> Result<()> {
-        self.seen_windows.remove(&window_id);
         self.previous_layouts.remove(&window_id);
         self.window_floating_state.remove(&window_id);
         self.maximized_windows.remove(&window_id);
@@ -697,7 +711,6 @@ impl crate::plugins::Plugin for WorkspaceRulePlugin {
         Self {
             niri,
             config,
-            seen_windows: HashSet::new(),
             previous_layouts: HashMap::new(),
             window_floating_state: HashMap::new(),
             maximized_windows: HashSet::new(),
@@ -710,18 +723,28 @@ impl crate::plugins::Plugin for WorkspaceRulePlugin {
         }
     }
 
-    async fn handle_event(&mut self, event: &Event, _niri: &NiriIpc) -> Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: &crate::plugins::PiriEvent,
+        _niri: &NiriIpc,
+    ) -> Result<()> {
         match event {
-            Event::WindowOpenedOrChanged { window } => {
-                self.handle_window_opened_or_changed(window).await?;
+            crate::plugins::PiriEvent::WindowOpened { window } => {
+                self.on_window_opened(window).await?;
             }
-            Event::WindowClosed { id } => {
+            crate::plugins::PiriEvent::WindowChanged { window } => {
+                self.on_window_changed(window).await?;
+            }
+            crate::plugins::PiriEvent::WindowToggleFloating { window } => {
+                self.on_window_toggle_floating(window).await?;
+            }
+            crate::plugins::PiriEvent::WindowClosed { id } => {
                 self.handle_window_closed(*id).await?;
             }
-            Event::WindowFocusChanged { id: Some(_) } => {
+            crate::plugins::PiriEvent::WindowFocusChanged { id: Some(_) } => {
                 self.sync_edge_pulse_indicator(None).await?;
             }
-            Event::WindowLayoutsChanged { changes } => {
+            crate::plugins::PiriEvent::WindowLayoutsChanged { changes } => {
                 let current_ws = self.niri.get_focused_workspace().await?;
                 let ws_name = &current_ws.name;
 
@@ -750,8 +773,7 @@ impl crate::plugins::Plugin for WorkspaceRulePlugin {
                     self.sync_edge_pulse_indicator(None).await?;
                 }
             }
-            Event::WorkspaceActivated { id, focused: true } => {
-                // Force re-evaluation on workspace switch; style and geometry may differ by workspace.
+            crate::plugins::PiriEvent::WorkspaceActivated { id, focused: true } => {
                 self.edge_pulse_last_render = None;
                 self.sync_edge_pulse_indicator(Some(*id)).await?;
             }
@@ -760,14 +782,16 @@ impl crate::plugins::Plugin for WorkspaceRulePlugin {
         Ok(())
     }
 
-    fn is_interested_in_event(&self, event: &Event) -> bool {
+    fn is_interested_in_event(&self, event: &crate::plugins::PiriEvent) -> bool {
         matches!(
             event,
-            Event::WindowOpenedOrChanged { .. }
-                | Event::WindowClosed { .. }
-                | Event::WindowFocusChanged { id: Some(_) }
-                | Event::WorkspaceActivated { .. }
-                | Event::WindowLayoutsChanged { .. }
+            crate::plugins::PiriEvent::WindowOpened { .. }
+                | crate::plugins::PiriEvent::WindowChanged { .. }
+                | crate::plugins::PiriEvent::WindowToggleFloating { .. }
+                | crate::plugins::PiriEvent::WindowClosed { .. }
+                | crate::plugins::PiriEvent::WindowFocusChanged { id: Some(_) }
+                | crate::plugins::PiriEvent::WorkspaceActivated { .. }
+                | crate::plugins::PiriEvent::WindowLayoutsChanged { .. }
         )
     }
 

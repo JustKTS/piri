@@ -1,7 +1,7 @@
+use crate::plugins::PiriEvent;
 use anyhow::Result;
 use async_trait::async_trait;
 use log::{debug, info};
-use niri_ipc::Event;
 
 use crate::config::Config;
 use crate::ipc::IpcRequest;
@@ -124,14 +124,14 @@ impl crate::plugins::Plugin for StickyPlugin {
         }
     }
 
-    async fn handle_event(&mut self, event: &Event, _niri: &NiriIpc) -> Result<()> {
-        if let Event::WorkspaceActivated { focused: true, .. } = event {
+    async fn handle_event(&mut self, event: &PiriEvent, _niri: &NiriIpc) -> Result<()> {
+        if let PiriEvent::WorkspaceActivated { focused: true, .. } = event {
             self.follow_focused_workspace().await?;
         }
         Ok(())
     }
 
-    fn is_interested_in_event(&self, event: &Event) -> bool {
-        matches!(event, Event::WorkspaceActivated { focused: true, .. })
+    fn is_interested_in_event(&self, event: &PiriEvent) -> bool {
+        matches!(event, PiriEvent::WorkspaceActivated { focused: true, .. })
     }
 }

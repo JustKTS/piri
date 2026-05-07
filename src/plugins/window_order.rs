@@ -1,7 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use log::{debug, info, warn};
-use niri_ipc::{Action, Event};
+use niri_ipc::Action;
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
@@ -11,6 +11,7 @@ use crate::ipc::IpcRequest;
 use crate::niri::NiriIpc;
 use crate::plugins::workspace_matches_filter;
 use crate::plugins::FromConfig;
+use crate::plugins::PiriEvent;
 
 /// Window order plugin config (for internal use)
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -493,7 +494,7 @@ impl crate::plugins::Plugin for WindowOrderPlugin {
         }
     }
 
-    async fn handle_event(&mut self, event: &Event, _niri: &NiriIpc) -> Result<()> {
+    async fn handle_event(&mut self, event: &PiriEvent, _niri: &NiriIpc) -> Result<()> {
         if !self.config.enable_event_listener {
             return Ok(());
         }
@@ -516,10 +517,12 @@ impl crate::plugins::Plugin for WindowOrderPlugin {
         Ok(())
     }
 
-    fn is_interested_in_event(&self, event: &Event) -> bool {
+    fn is_interested_in_event(&self, event: &PiriEvent) -> bool {
         matches!(
             event,
-            Event::WindowLayoutsChanged { .. } | Event::WindowOpenedOrChanged { .. }
+            PiriEvent::WindowLayoutsChanged { .. }
+                | PiriEvent::WindowOpened { .. }
+                | PiriEvent::WindowToggleFloating { .. }
         )
     }
 }

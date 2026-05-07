@@ -18,6 +18,15 @@ Piri is a high-performance [Niri](https://github.com/YaLTeR/niri) compositor ext
 - 📋 **Window Order**: Weight-based window reordering, minimizes movement (see [Docs](docs/en/plugins/window_order.md))
 - 🍽️ **Swallow**: Window swallowing, child replaces parent in layout (see [Docs](docs/en/plugins/swallow.md))
 
+## Core Features
+
+- **High Performance with Rust**: Built with Rust, low memory footprint, async event handling
+- **Efficient IPC Communication**: Communicates with Niri compositor via Unix Socket, automatic reconnect, batch command execution
+- **Unified Event Distribution**: Single event listener receives all Niri events and distributes to plugins based on interest
+- **Fine-grained Event Splitting**: Automatically splits coarse-grained Niri events into `WindowOpened`, `WindowChanged`, `WindowToggleFloating` and other sub-events, so plugins don't need to track window state themselves (see [Docs](docs/en/event_normalization.md))
+- **State-driven Plugin System**: Each plugin implements a unified `Plugin` trait, supporting config hot-reload, event filtering, and IPC command handling
+- **Hot Config Reload**: Changes to `piri.toml` take effect immediately without restarting the daemon
+
 ## Window Matching
 
 Piri uses a unified window matching mechanism: regex on `app_id` and/or `title`. Plugins such as `window_rule`, `singleton`, and `scratchpads` use it to find windows.
@@ -261,6 +270,7 @@ open_on_workspace = "browser"
 **Features**:
 - Regex matching (`app_id`/`title`, lists supported, OR logic)
 - Workspace name/index matching
+- Workspace locking (`!` suffix), prevents windows from being moved away
 - Focus-triggered commands with de-duplication
 - `focus_command_once`: per-rule single execution ([issue #1](https://github.com/Asthestarsfalll/piri/issues/1))
 - Pure event-driven
@@ -466,6 +476,7 @@ For detailed documentation, please refer to the [Swallow documentation](docs/en/
 ## Documentation
 
 - [Architecture](docs/en/architecture.md) - Project architecture and how it works
+- [Fine-grained Event Splitting](docs/en/event_normalization.md) - Event splitting mechanism explained
 - [Plugin System](docs/en/plugins/plugins.md) - Detailed plugin system documentation
 - [Development Guide](docs/en/development.md) - Development, extension, and contribution guide
 
