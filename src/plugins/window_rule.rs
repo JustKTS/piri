@@ -102,7 +102,7 @@ impl WindowRulePlugin {
         // Update tracking before processing
         self.last_handled_window = Some(window_id);
 
-        let windows = self.niri.get_windows().await?;
+        let windows = self.niri.get_windows_raw().await?;
         let window = match windows.into_iter().find(|w| w.id == window_id) {
             Some(w) => w,
             None => {

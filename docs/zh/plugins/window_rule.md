@@ -63,7 +63,7 @@ open_on_workspace = "browser"
 
 - `app_id` (可选): 正则匹配窗口 `app_id`，支持字符串或列表（OR 逻辑）
 - `title` (可选): 正则匹配窗口标题，支持字符串或列表（OR 逻辑）
-- `open_on_workspace` (可选): 目标 workspace（名称/索引）
+- `open_on_workspace` (可选): 目标 workspace（名称/索引），支持 `workspace@output` 格式指定显示器
 - `focus_command` (可选): 窗口获焦时执行命令
 - `focus_command_once` (默认 `false`): 规则级单次执行（[issue #1](https://github.com/Asthestarsfalll/piri/issues/1)）
 
@@ -71,6 +71,22 @@ open_on_workspace = "browser"
 - 至少指定 `app_id`/`title` 之一
 - 至少指定 `open_on_workspace`/`focus_command` 之一
 - `app_id`/`title` 可单独或列表形式，任一匹配即触发
+
+### 显示器匹配
+
+使用 `workspace@output` 格式将窗口移动到指定显示器上的工作区：
+
+```toml
+# 将 Firefox 移到 DP-1 显示器上的工作区 "2"
+[[window_rule]]
+app_id = "firefox"
+open_on_workspace = "2@DP-1"
+
+# 将 Chrome 移到 eDP-1 显示器上的工作区 "browser"
+[[window_rule]]
+app_id = "chrome"
+open_on_workspace = "browser@eDP-1"
+```
 
 > **窗口匹配**: 关于窗口匹配机制的详细说明，请参阅 [窗口匹配机制文档](../window_matching.md) 和 [插件系统通用配置说明](plugins.md#通用配置说明)
 

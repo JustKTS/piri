@@ -11,7 +11,7 @@ window_order = true
 [piri.window_order]
 enable_event_listener = true  # Enable event listening for automatic reordering
 default_weight = 0            # Default weight for unconfigured windows
-# workspaces = ["1", "2", "dev"]  # Optional: only apply to specific workspaces (empty = all)
+# workspaces = ["1", "2@DP-1", "dev@eDP-1"]  # Optional: only apply to specific workspaces (empty = all)
 
 [window_order]
 google-chrome = 100
@@ -23,7 +23,7 @@ ghostty = 70
 
 - `enable_event_listener`: Whether to enable event listening. When enabled, windows are automatically reordered when layout changes or new windows open (only works in configured `workspaces`)
 - `default_weight`: Default weight value for windows not configured in `[window_order]`
-- `workspaces`: Optional, specify which workspaces to apply window ordering. Can be workspace names or indices (array of strings). If empty or not specified, applies to all workspaces
+- `workspaces`: Optional, specify which workspaces to apply window ordering. Can be workspace names, indices, or `name@output` format (array of strings). If empty or not specified, applies to all workspaces
 - `[window_order]`: Window weight configuration table, where keys are window `app_id` and values are weights (larger values go to the left)
 
 ### Weight Matching Rules
@@ -102,4 +102,4 @@ The plugin uses an intelligent algorithm to minimize the number of window moves:
    - **Automatic Trigger**: Only works in workspaces specified in `workspaces` configuration. If not configured or empty, applies to all workspaces
 3. **Larger Weight = Left**: A window with weight 100 will be to the left of a window with weight 80
 4. **Same Weight Preserves Order**: Windows with the same weight don't change relative order to reduce unnecessary moves
-5. **Workspace Matching**: `workspaces` supports workspace names or indices (as strings), e.g., `["1", "2", "dev"]`
+5. **Workspace Matching**: `workspaces` supports workspace names, indices, or `workspace@output` format (as strings), e.g., `["1", "2@DP-1", "dev@eDP-1"]`. The `@output` part supports display prefix matching (`"2@DP"` matches `DP-1`, `DP-2`, etc.)

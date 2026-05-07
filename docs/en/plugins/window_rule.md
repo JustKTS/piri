@@ -84,6 +84,22 @@ Supports two types:
 
 **Matching Order**: Name first, then idx.
 
+### Monitor-Specific Matching
+
+Use the `workspace@output` format to move windows to a workspace on a specific output:
+
+```toml
+# Move to workspace "2" on output "DP-1"
+[[window_rule]]
+app_id = "firefox"
+open_on_workspace = "2@DP-1"
+
+# Move to workspace "browser" on output "eDP-1"
+[[window_rule]]
+app_id = "chrome"
+open_on_workspace = "browser@eDP-1"
+```
+
 ## How It Works
 
 The plugin listens for `WindowOpenedOrChanged` events:

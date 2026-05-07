@@ -112,8 +112,11 @@ async fn run_daemon_loop(
             event_result = event_rx.recv() => {
                 match event_result {
                     Some(event) => {
-                        // Refresh outputs cache on output-related events
-                        if matches!(&event, niri_ipc::Event::WorkspacesChanged { .. } | niri_ipc::Event::ConfigLoaded { .. }) {
+                        // Refresh outputs cache on events that may affect output state:
+                        // - WorkspacesChanged: workspace config changed, possibly due to output changes
+                        // - WorkspaceActivated: new output connected activates a workspace on it
+                        // - ConfigLoaded: config reload may change output settings
+                        if matches!(&event, niri_ipc::Event::WorkspacesChanged { .. } | niri_ipc::Event::WorkspaceActivated { .. } | niri_ipc::Event::ConfigLoaded { .. }) {
                             let niri_refresh = niri.clone();
                             tokio::spawn(async move {
                                 if let Err(e) = niri_refresh.refresh_outputs().await {

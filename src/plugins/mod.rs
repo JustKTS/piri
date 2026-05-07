@@ -23,6 +23,25 @@ use crate::ipc::IpcRequest;
 use crate::niri::NiriIpc;
 use crate::utils::send_notification;
 
+const DISPLAY_PREFIXES: &[(&str, &str)] = &[
+    ("HDMI-A", "HDMI"),
+    ("DVI-D", "DVI-D"),
+    ("DVI-I", "DVI-I"),
+    ("Virtual", "Virtual"),
+    ("Unknown", "Unknown"),
+    ("USB", "USB"),
+    ("eDP", "eDP"),
+    ("VGA", "VGA"),
+    ("DP", "DP"),
+];
+
+fn extract_display_prefix(output: &str) -> Option<&str> {
+    DISPLAY_PREFIXES
+        .iter()
+        .find(|(prefix, _)| output.starts_with(prefix))
+        .map(|(_, canonical)| *canonical)
+}
+
 /// Plugin trait that all plugins must implement
 #[async_trait]
 pub trait Plugin: Send + Sync {
@@ -56,6 +75,79 @@ pub trait Plugin: Send + Sync {
     async fn update_config(&mut self, _config: Self::Config) -> Result<()> {
         Ok(())
     }
+}
+
+/// Resolve a workspace config key with monitor-aware lookup.
+///
+/// Resolution order (first match wins):
+/// 1. `"{idx}@{output}"`     — e.g., "1@DP-2" (exact output, most specific)
+/// 2. `"{name}@{output}"`    — e.g., "browser@DP-2"
+/// 3. `"{idx}@{prefix}"`     — e.g., "1@DP" (display prefix match)
+/// 4. `"{name}@{prefix}"`    — e.g., "browser@DP"
+/// 5. `"{name}"`             — e.g., "browser" (by name only)
+/// 6. `"{idx}"`              — e.g., "1" (fallback, backward compatible)
+pub fn resolve_workspace_config<'a, T>(
+    map: &'a std::collections::HashMap<String, T>,
+    idx: u8,
+    name: Option<&str>,
+    output: Option<&str>,
+) -> Option<&'a T> {
+    if let Some(out) = output {
+        let key = format!("{}@{}", idx, out);
+        if let Some(v) = map.get(&key) {
+            return Some(v);
+        }
+        if let Some(n) = name {
+            let key = format!("{}@{}", n, out);
+            if let Some(v) = map.get(&key) {
+                return Some(v);
+            }
+        }
+        if let Some(pf) = extract_display_prefix(out) {
+            let key = format!("{}@{}", idx, pf);
+            if let Some(v) = map.get(&key) {
+                return Some(v);
+            }
+            if let Some(n) = name {
+                let key = format!("{}@{}", n, pf);
+                if let Some(v) = map.get(&key) {
+                    return Some(v);
+                }
+            }
+        }
+    }
+    if let Some(n) = name {
+        if let Some(v) = map.get(n) {
+            return Some(v);
+        }
+    }
+    map.get(&idx.to_string())
+}
+
+pub fn workspace_matches_filter(
+    idx: u8,
+    name: Option<&str>,
+    output: Option<&str>,
+    filters: &[String],
+) -> bool {
+    if filters.is_empty() {
+        return true;
+    }
+    let idx_str = idx.to_string();
+    for filter in filters {
+        if let Some((left, right)) = filter.split_once('@') {
+            let output_matches =
+                output.is_some_and(|o| o == right || extract_display_prefix(o) == Some(right));
+            if output_matches && (left == idx_str || Some(left) == name) {
+                return true;
+            }
+        }
+        // Direct name or idx match
+        if Some(filter.as_str()) == name || *filter == idx_str {
+            return true;
+        }
+    }
+    false
 }
 
 pub trait FromConfig {
